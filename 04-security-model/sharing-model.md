@@ -1,6 +1,6 @@
 # Sharing Model
 
-**OWD, role hierarchy, sharing rules, manual sharing — they stack. Get the order wrong and users either see too much or too little.**
+**OWD, role hierarchy, sharing rules, and manual sharing stack together. Get the order wrong and users either see too much or too little.**
 
 ## The 4 Layers
 
@@ -54,8 +54,8 @@ Sharing rules can grant Read Only or Read/Write access. They can't grant access 
 
 | Keyword | What it does |
 |---|---|
-| `with sharing` | Enforces all 4 sharing layers — users only see records they have access to |
-| `without sharing` | Bypasses record visibility — user can query all records regardless of sharing |
+| `with sharing` | Enforces all 4 sharing layers. Users only see records they have access to. |
+| `without sharing` | Bypasses record visibility. User can query all records regardless of sharing. |
 | `inherited sharing` | Takes the calling class's sharing context |
 
 When no keyword is specified, the default is `without sharing` for classes called from external contexts, but it's undefined when called from another Apex class. Always declare explicitly.

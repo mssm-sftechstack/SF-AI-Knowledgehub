@@ -56,10 +56,10 @@ coverage/
 
 | Interaction | Rules Applied |
 |---|---|
-| Chat (`Ctrl+L`) | Yes — full `.cursorrules` context |
-| Cmd+K inline edit | Yes — full `.cursorrules` context |
-| Autocomplete (Tab) | Partial — model may apply some rules |
-| Composer (multi-file) | Yes — full `.cursorrules` context |
+| Chat (`Ctrl+L`) | Yes, full `.cursorrules` context |
+| Cmd+K inline edit | Yes, full `.cursorrules` context |
+| Autocomplete (Tab) | Partial. Model may apply some rules. |
+| Composer (multi-file) | Yes, full `.cursorrules` context |
 
 Chat and Composer are the most reliable ways to enforce rules. The full context file is always loaded there.
 

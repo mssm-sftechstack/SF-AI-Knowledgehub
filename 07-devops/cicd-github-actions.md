@@ -31,7 +31,7 @@ openssl req -new -x509 -key server.key -out server.crt -days 365 \
 
 ## The Two Workflows Everyone Needs
 
-### 1. PR Validation — validate on every PR to main
+### 1. PR Validation: validate on every PR to main
 
 ```yaml
 name: Validate PR
@@ -71,7 +71,7 @@ jobs:
         run: rm -f server.key
 ```
 
-### 2. Deploy on Merge — full deploy when PR merges to main
+### 2. Deploy on Merge: full deploy when PR merges to main
 
 ```yaml
 name: Deploy to Sandbox

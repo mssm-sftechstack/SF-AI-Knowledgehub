@@ -47,7 +47,7 @@
 
 | Error | Root Cause | Fix |
 |---|---|---|
-| `System.AssertException: Assertion failed` | Test assertion mismatch | Check the expected value — use `System.assertEquals(expected, actual, 'message')` with a message |
+| `System.AssertException: Assertion failed` | Test assertion mismatch | Check the expected value. Use `System.assertEquals(expected, actual, 'message')` with a message. |
 | `CANNOT_INSERT_UPDATE_ACTIVATE_ENTITY` | Trigger fires during test and throws an error | Check trigger logic for missing null guards on test data |
 | `Static variable is null in async context` | Bypass flag set via static variable doesn't survive Queueable | Use Custom Permissions for bypass, not static booleans |
 | `Variable does not exist: Trigger.new` | Using `Trigger.new` outside a trigger context | Use the handler constructor pattern to pass `Trigger.new` in |
@@ -60,5 +60,5 @@
 |---|---|---|
 | Wrong action fires | Vague `description` on `@InvocableMethod` | Rewrite description with specific trigger phrases ("Use when user says...") |
 | Action fires multiple times | Agent retries on ambiguous response | Make the action idempotent (check-then-act) |
-| Summary field is blank | `summary` not set in the response class | Set `res.summary` before returning — the agent relies on it |
+| Summary field is blank | `summary` not set in the response class | Set `res.summary` before returning. The agent relies on it. |
 | PII in agent response | Summary string includes email/phone data | Reference names and case numbers, not raw contact fields |

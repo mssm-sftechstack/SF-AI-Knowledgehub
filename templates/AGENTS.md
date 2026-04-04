@@ -1,4 +1,4 @@
-# SALESFORCE PROJECT — AI AGENT RULES
+# SALESFORCE PROJECT: AI AGENT RULES
 
 These are the development rules for this Salesforce DX project. Any AI tool that reads `AGENTS.md` should apply all rules below to every file it generates or modifies. Tools that don't read this file automatically can use its contents as a system prompt at the start of a session.
 

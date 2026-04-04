@@ -1,4 +1,4 @@
-# SALESFORCE PROJECT — CLAUDE CODE CONFIGURATION
+# SALESFORCE PROJECT: CLAUDE CODE CONFIGURATION
 
 ## Org Context
 
@@ -9,7 +9,7 @@
 - Deploy command: sf project deploy start --source-dir force-app --target-org <your-org-alias>
 - Retrieve command: sf project retrieve start --manifest manifest/package.xml --target-org <your-org-alias>
 
-## Hard Rules — Apply Without Exception
+## Hard Rules: Apply Without Exception
 
 1. Always ask for confirmation before running any deployment command.
 2. Only deploy to the org alias defined above. All other targets are blocked.

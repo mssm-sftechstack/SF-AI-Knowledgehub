@@ -1,6 +1,6 @@
 # Order of Execution
 
-**Triggers, flows, validation rules, workflow — they all fire in a specific order. If you don't know this, you'll write logic that steps on itself.**
+**Triggers, flows, validation rules, workflow all fire in a specific order. If you don't know this, you'll write logic that steps on itself.**
 
 ## The Full Sequence
 

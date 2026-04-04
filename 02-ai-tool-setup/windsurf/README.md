@@ -6,7 +6,7 @@
 
 ## 1. Install Windsurf
 
-Download from [codeium.com/windsurf](https://codeium.com/windsurf) and install. Windsurf is a VS Code fork with Cascade — an agentic AI that can read, write, and execute across multiple files in one session.
+Download from [codeium.com/windsurf](https://codeium.com/windsurf) and install. Windsurf is a VS Code fork with Cascade, an agentic AI that can read, write, and execute across multiple files in one session.
 
 ## 2. Open Your Salesforce Project
 

@@ -50,7 +50,7 @@ trigger AccountTrigger on Account (before insert, after update) {
 
 This buries logic in a place that can't be unit tested cleanly, can't be bypassed, and gets messy fast.
 
-### Trigger — one line body
+### Trigger: one line body
 
 ```apex
 trigger AccountTrigger on Account (
@@ -61,7 +61,7 @@ trigger AccountTrigger on Account (
 }
 ```
 
-### TriggerHandler — routes only
+### TriggerHandler: routes only
 
 ```apex
 public with sharing class AccountTriggerHandler extends TriggerHandler {
@@ -86,7 +86,7 @@ public with sharing class AccountTriggerHandler extends TriggerHandler {
 
 No SOQL. No business logic. Just routing.
 
-### Service — logic lives here
+### Service: logic lives here
 
 ```apex
 public with sharing class AccountService {
@@ -121,7 +121,7 @@ public with sharing class AccountService {
 }
 ```
 
-### Selector — all SOQL here
+### Selector: all SOQL here
 
 ```apex
 public inherited sharing class AccountSelector {

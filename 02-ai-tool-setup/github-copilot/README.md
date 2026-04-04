@@ -27,7 +27,7 @@ Open Copilot Chat (`Ctrl+Shift+I` on Windows, `Cmd+Shift+I` on Mac) and ask:
 What are the Salesforce rules for this repository?
 ```
 
-Copilot should describe the rules from your instructions file. If it doesn't, check the file is in `.github/` — not `.github/workflows/` or any subdirectory.
+Copilot should describe the rules from your instructions file. If it doesn't, check the file is in `.github/`, not `.github/workflows/` or any subdirectory.
 
 ## 4. Use Open Files as Additional Context
 

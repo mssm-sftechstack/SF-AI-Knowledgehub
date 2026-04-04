@@ -63,7 +63,7 @@ public class TestDataFactory {
 
 ---
 
-## Bulk Test — Always 200 Records
+## Bulk Test: Always 200 Records
 
 ```apex
 @IsTest
@@ -87,7 +87,7 @@ Don't test with 1 record and call it done. Trigger frameworks, governor limits, 
 
 ---
 
-## System.runAs() — When You Must Use It
+## System.runAs(): When You Must Use It
 
 Use it when your service enforces FLS or CRUD and the test user needs a permission set to see the fields.
 
@@ -143,7 +143,7 @@ static void testMixedDml_fixed() {
 }
 ```
 
-Or just use `TestDataFactory.createStandardUser(true)` — it already handles this.
+Or just use `TestDataFactory.createStandardUser(true)`, which already handles this.
 
 ---
 

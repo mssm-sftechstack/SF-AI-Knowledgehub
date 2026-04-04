@@ -81,7 +81,7 @@ Each LWC folder contains: `.html`, `.js`, `.js-meta.xml`, optionally `.css` and 
 
 ---
 
-## package.xml Snippet — Common Types
+## package.xml Snippet: Common Types
 
 ```xml
 <?xml version="1.0" encoding="UTF-8"?>

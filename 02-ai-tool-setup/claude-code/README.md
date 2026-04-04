@@ -35,22 +35,22 @@ cp path/to/SF-AI-Knowledgehub/templates/CLAUDE.md ./CLAUDE.md
 
 Open it and fill in the two placeholders marked `# FILL IN`:
 
-- `<your-org-alias>` — the alias you use with `sf org login`
-- `<your-instance-url>` — your org's My Domain URL (e.g. `https://mycompany.my.salesforce.com`)
+- `<your-org-alias>`: the alias you use with `sf org login`
+- `<your-instance-url>`: your org's My Domain URL (e.g. `https://mycompany.my.salesforce.com`)
 
 ## 4. What CLAUDE.md Does
 
 Claude Code reads `CLAUDE.md` automatically at session start. It sets:
 
-- **Org context** — alias, API version, deploy and retrieve commands
-- **Hard rules** — non-negotiable rules Claude applies to every file it writes
-- **Deployment order** — the sequence Claude follows when planning a multi-file deploy
+- **Org context**: alias, API version, deploy and retrieve commands
+- **Hard rules**: non-negotiable rules Claude applies to every file it writes
+- **Deployment order**: the sequence Claude follows when planning a multi-file deploy
 
 Claude won't generate code that violates these rules. If you ask it to put SOQL in a loop, it'll refuse and explain why.
 
 ## 5. Add Skills (Optional but Recommended)
 
-Skills are reusable instruction sets for specific tasks — Apex, LWC, Flow, security review, etc. Claude loads them on demand, keeping your main context lean.
+Skills are reusable instruction sets for specific tasks: Apex, LWC, Flow, security review, etc. Claude loads them on demand, keeping your main context lean.
 
 Copy the pre-built skills into your project:
 
@@ -92,7 +92,7 @@ Ask Claude Code:
 What are the hard rules for this project?
 ```
 
-It should recite the rules from your `CLAUDE.md`. If it doesn't, check that `CLAUDE.md` is in the project root — the same folder where you ran `claude`.
+It should recite the rules from your `CLAUDE.md`. If it doesn't, check that `CLAUDE.md` is in the project root, the same folder where you ran `claude`.
 
 ---
 

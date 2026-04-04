@@ -59,7 +59,7 @@ A Topic also defines:
 - **Instructions**: how the agent should behave within this topic (tone, escalation rules, what to say if data isn't found)
 - **Actions**: which Actions are available when this topic is active
 
-## Actions — 4 Types
+## Actions: 4 Types
 
 | Type | Use when | Notes |
 |---|---|---|
@@ -139,6 +139,6 @@ Before deploying an Agentforce agent, verify all of these:
 - [ ] Every Topic description clearly describes what user intents it handles
 - [ ] Every Action description specifies when the LLM should call it
 - [ ] All Invocable Apex actions return a human-readable summary String
-- [ ] All Apex actions use `WITH SECURITY_ENFORCED` or `Security.stripInaccessible()` — agents run in user context
+- [ ] All Apex actions use `WITH SECURITY_ENFORCED` or `Security.stripInaccessible()` (agents run in user context)
 - [ ] The agent has a fallback Topic for unrecognised intents (avoids silent failures)
 - [ ] Test the agent with at least 5 edge-case prompts in Agent Builder before activating

@@ -131,6 +131,6 @@ Use Custom Permissions for bypass patterns (like skipping trigger logic for data
 ```
 
 Key points about the metadata:
-- `tabSettings` not `tabVisibilities` — the correct element name for PS metadata
+- `tabSettings` not `tabVisibilities`: the correct element name for PS metadata
 - Tab visibility values are `Available` or `None` (not `DefaultOn`)
 - Elements must appear in the order the XSD expects: `objectPermissions` before `fieldPermissions` before `customPermissions` before `tabSettings`

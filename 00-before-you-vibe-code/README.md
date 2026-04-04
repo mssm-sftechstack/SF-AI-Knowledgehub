@@ -69,8 +69,8 @@ See [02-ai-tool-setup/](../02-ai-tool-setup/) for ready-to-use context file temp
 
 ## Before writing your first prompt
 
-1. Read [multitenant-risks.md](./multitenant-risks.md) — understand what breaks and why.
-2. Complete [setup-checklist.md](./setup-checklist.md) — 20 items, takes about 10 minutes.
+1. Read [multitenant-risks.md](./multitenant-risks.md) to understand what breaks and why.
+2. Complete [setup-checklist.md](./setup-checklist.md). 20 items, takes about 10 minutes.
 3. Set up your environment using [01-environment-setup/](../01-environment-setup/).
 4. Load the context file for your AI tool from [02-ai-tool-setup/](../02-ai-tool-setup/).
 

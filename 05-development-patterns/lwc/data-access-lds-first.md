@@ -1,4 +1,4 @@
-# LWC Data Access — LDS First
+# LWC Data Access: LDS First
 
 **Before writing an Apex method for CRUD, ask if LDS can handle it. Usually it can.**
 

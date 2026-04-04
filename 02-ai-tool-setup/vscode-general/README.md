@@ -70,10 +70,10 @@ You are working on a Salesforce DX project. Apply these rules to every file you 
 - Use Permission Sets, not Profiles, for new features
 - Never hardcode IDs, Record Type IDs, or credentials
 - Resolve Record Type IDs dynamically via getRecordTypeInfosByDeveloperName()
-- Never make callouts from trigger context — use Queueable with Database.AllowsCallouts
+- Never make callouts from trigger context. Use Queueable with Database.AllowsCallouts.
 - Every new Apex class needs a paired test class with 90%+ coverage
 - Always include a bulk test with 200 records
-- Always use @IsTest(SeeAllData=false) — never seeAllData=true
+- Always use @IsTest(SeeAllData=false). Never seeAllData=true.
 - Deploy in order: Objects → Fields → Permission Sets → Apex → Triggers → Flows → LWC
 - Never deploy without my explicit confirmation
 ```

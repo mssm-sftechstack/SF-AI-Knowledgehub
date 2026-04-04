@@ -47,7 +47,7 @@ Id rtId = Schema.SObjectType.Opportunity
 **Field-level security in SOQL.** Every SOQL query must use `WITH SECURITY_ENFORCED` or `Security.stripInaccessible()`. This enforces that the running user can actually read the fields being queried.
 
 ```apex
-// WITH SECURITY_ENFORCED — throws exception if field is inaccessible
+// WITH SECURITY_ENFORCED: throws exception if field is inaccessible
 List<Account> accounts = [
     SELECT Id, Name, AnnualRevenue
     FROM Account
@@ -55,7 +55,7 @@ List<Account> accounts = [
     WITH SECURITY_ENFORCED
 ];
 
-// Security.stripInaccessible — removes inaccessible fields silently
+// Security.stripInaccessible: removes inaccessible fields silently
 SObjectAccessDecision decision = Security.stripInaccessible(
     AccessType.READABLE,
     [SELECT Id, Name, AnnualRevenue FROM Account WHERE Industry = 'Technology']
@@ -75,18 +75,18 @@ List<Account> accounts = (List<Account>) decision.getRecords();
 
 All Apex in this project follows a four-layer structure:
 
-**Trigger** — zero logic, one line delegating to the handler:
+**Trigger**: zero logic, one line delegating to the handler:
 ```apex
 trigger AccountTrigger on Account (before insert, before update, after insert, after update) {
     new AccountTriggerHandler().run();
 }
 ```
 
-**TriggerHandler** — routes by context (before/after, insert/update), no SOQL, no business logic.
+**TriggerHandler**: routes by context (before/after, insert/update), no SOQL, no business logic.
 
-**Service** — all business logic, no SOQL. Receives collections of records and IDs, calls the Selector for data.
+**Service**: all business logic, no SOQL. Receives collections of records and IDs, calls the Selector for data.
 
-**Selector** — all SOQL lives here. Uses `inherited sharing` so the caller's sharing context applies.
+**Selector**: all SOQL lives here. Uses `inherited sharing` so the caller's sharing context applies.
 
 Never create a second trigger on an object that already has one. Extend the handler instead.
 
@@ -96,10 +96,10 @@ Never create a second trigger on an object that already has one. Extend the hand
 
 Every new Apex class requires a paired test class. Test classes must meet all of these:
 
-- `@IsTest(SeeAllData=false)` on every test class — never `seeAllData=true`
+- `@IsTest(SeeAllData=false)` on every test class. Never `seeAllData=true`.
 - 90%+ code coverage minimum
 - At least one bulk test method that processes 200 records
-- `System.runAs()` wrapping any test that calls code using `Security.stripInaccessible()` or `WITH USER_MODE` — System Admin skips FLS silently, which causes false passes
+- `System.runAs()` wrapping any test that calls code using `Security.stripInaccessible()` or `WITH USER_MODE`. System Admin skips FLS silently, which causes false passes.
 - `System.assertEquals(expected, actual, 'message')` on specific field values, not just record counts
 
 ---
@@ -135,4 +135,4 @@ Always validate before deploying. Never deploy without user confirmation.
 - No em dashes in comments
 - Class names: PascalCase. Methods: camelCase. Test classes: ClassNameTest. Selectors: ObjectNameSelector
 - API version 62.0 in all metadata files
-- `sf` CLI v2 only — never `sfdx` commands
+- `sf` CLI v2 only. Never `sfdx` commands.

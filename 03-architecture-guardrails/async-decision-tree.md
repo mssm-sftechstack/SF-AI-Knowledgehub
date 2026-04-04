@@ -1,4 +1,4 @@
-# Async Patterns — Which One to Use
+# Async Patterns: Which One to Use
 
 **Four async options, each with a different tradeoff. Pick the wrong one and you'll either hit limits or over-engineer it.**
 
@@ -113,7 +113,7 @@ public void execute(QueueableContext ctx) {
 }
 ```
 
-## Queueable with Callout — the Most Common Pattern
+## Queueable with Callout: the Most Common Pattern
 
 This is what you need when a trigger needs to call an external API.
 

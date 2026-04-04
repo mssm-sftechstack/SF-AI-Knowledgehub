@@ -130,10 +130,10 @@ Map<String, Object> data = (Map<String, Object>) JSON.deserializeUntyped(body);
 
 Every callout endpoint goes through a Named Credential. No hardcoded URLs. No credentials in code.
 
-**Wrong:**
+**Wrong: hardcoded URL and token. Never do this:**
 ```apex
 req.setEndpoint('https://api.example.com/cases');
-req.setHeader('Authorization', 'Bearer mytoken123');
+req.setHeader('Authorization', 'Bearer mytoken123'); // FAKE token for illustration — real tokens must NEVER appear in code
 ```
 
 **Right:**
