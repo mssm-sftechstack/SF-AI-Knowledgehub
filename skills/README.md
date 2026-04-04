@@ -27,7 +27,7 @@ Each skill folder contains two files:
 - `README.md` -- plain markdown, works with any AI tool
 - `SKILL.md` -- Claude Code format with frontmatter (use this if you're on Claude Code)
 
-See [_how-to-use/](_how-to-use/) for step-by-step instructions for each tool.
+See [guides/](guides/) for step-by-step instructions for each tool.
 
 ## Quick usage by tool
 
