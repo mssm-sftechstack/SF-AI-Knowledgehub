@@ -36,3 +36,6 @@ build/
 .claude/sessions/
 .claude/cache/
 .claude/telemetry/
+
+# Profile README — belongs in mssm-sftechstack/mssm-sftechstack repo, not here
+github-profile-README.md
