@@ -1,0 +1,38 @@
+# Salesforce DX
+.sfdx/
+.sf/
+*.log
+
+# Node
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# VS Code
+.vscode/settings.json
+.vscode/launch.json
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Credentials / secrets — never commit these
+*.key
+*.pem
+*.p12
+server.key
+jwt.key
+.env
+.env.*
+
+# Build artifacts
+dist/
+build/
+*.zip
+
+# Claude Code local session files
+.claude/sessions/
+.claude/cache/
+.claude/telemetry/
