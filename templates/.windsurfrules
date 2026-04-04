@@ -1,0 +1,58 @@
+# Salesforce Development Rules — loaded automatically by Windsurf Cascade
+
+# Cascade reads this file as persistent context for all interactions in this project.
+# Cascade's multi-file awareness is a strength — use it. When writing a new feature,
+# always work across the full stack (trigger, handler, service, selector, test class)
+# in a single Cascade session so rules apply consistently across all files.
+
+## Core Multi-Tenant Rules
+
+- Never put SOQL or DML inside a for loop. Collect all IDs before the loop, query once outside, use Map<Id, SObject> for lookups inside the loop.
+- Always bulkify Apex — every method must handle 200+ records without hitting governor limits.
+- Never hardcode Salesforce IDs, Record Type IDs, Queue IDs, or credentials in code or metadata.
+- Always use `with sharing` on Apex classes. Document exceptions with a comment.
+- Resolve Record Type IDs dynamically via getRecordTypeInfosByDeveloperName().get('DeveloperName').getRecordTypeId().
+
+## Security Rules
+
+- Always use WITH SECURITY_ENFORCED or Security.stripInaccessible() in every SOQL query.
+- Never use seeAllData=true in test classes. Always @IsTest(SeeAllData=false).
+- Use Permission Sets for all new feature access — never add permissions to Profiles.
+- Never make HTTP callouts from trigger context — use Queueable implements Database.AllowsCallouts.
+- Never use innerHTML with user-supplied data in LWC — use textContent.
+- Read every restricted picklist field's .field-meta.xml before writing code that sets it. Use only exact <fullName> values.
+
+## Architecture Rules
+
+- One trigger per Salesforce object. Extend the handler — never add a second trigger.
+- Layer all Apex: Trigger (delegate only) → TriggerHandler (route by context) → Service (business logic, no SOQL) → Selector (all SOQL, inherited sharing).
+- No SOQL in Service or Handler classes. All queries go through a Selector class.
+- Selector classes: inherited sharing. Service and Handler classes: with sharing.
+
+## Cascade-Specific Notes
+
+- When Cascade writes a Service class, it must also write the paired Selector class in the same session.
+- When Cascade writes any Apex class, it must also write the paired test class in the same session.
+- When generating metadata XML files, use API version 62.0 in all apiVersion fields.
+- When Cascade opens sfdx-project.json to understand package directories, use that information to place new files in the correct source path.
+- Object metadata fields enableBulkApi, enableSharing, and enableStreamingApi must ALL be the same boolean value — mixing causes deploy failures.
+
+## Testing Rules
+
+- Every new Apex class requires a paired test class with 90%+ coverage.
+- Always include a bulk test method with 200 records.
+- Use System.runAs() for tests that call methods using Security.stripInaccessible() or WITH USER_MODE.
+- Assert specific field values — not just record counts.
+
+## Deployment Rules
+
+- Validate before deploying: sf project deploy validate --source-dir force-app --target-org <alias>
+- Deploy order: Custom Objects and Fields → Custom Metadata → Custom Settings → Custom Tabs → Permission Sets → Apex → Triggers → Flows → LWC → FlexiPages → Layouts → Profiles.
+- Never deploy without explicit user confirmation.
+- Use `sf` CLI v2 commands only — never `sfdx`.
+
+## Code Style
+
+- No AI-pattern comments: "This ensures that...", "It's important to note...", "is responsible for..."
+- No em dashes in comments.
+- Class names: PascalCase. Methods: camelCase. Test classes: ClassNameTest. Selectors: ObjectNameSelector.

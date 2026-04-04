@@ -1,0 +1,61 @@
+# Salesforce Development Rules — loaded automatically by Cursor
+
+## Core Multi-Tenant Rules
+
+- Never put SOQL or DML inside a for loop. Collect IDs first, query outside the loop, then use a Map<Id, SObject> for lookups inside the loop.
+- Always bulkify Apex — every method must handle 200+ records without hitting governor limits. Design for collections, not single records.
+- Never hardcode Salesforce IDs, Record Type IDs, Queue IDs, Profile IDs, or credentials anywhere in code or metadata.
+- Always use `with sharing` on Apex classes. If you must deviate, add a comment explaining why (e.g. `// without sharing — Selector runs queries on behalf of calling context via inherited sharing`).
+- Resolve Record Type IDs dynamically:
+  ```apex
+  Id rtId = Schema.SObjectType.Account
+      .getRecordTypeInfosByDeveloperName()
+      .get('Customer')
+      .getRecordTypeId();
+  ```
+
+## Security Rules
+
+- Always use WITH SECURITY_ENFORCED or Security.stripInaccessible() in every SOQL query — never omit field-level security enforcement.
+- Never use seeAllData=true in test classes. Always use @IsTest(SeeAllData=false).
+- Use Permission Sets for all new feature access — never add permissions directly to Profiles.
+- Never make HTTP callouts from trigger context — use a Queueable class that implements Database.AllowsCallouts.
+- Never use innerHTML with user-supplied data in LWC JavaScript. Use textContent or sanitize first.
+- Read every restricted picklist field's .field-meta.xml before writing code that sets it — use only the exact <fullName> string from the metadata file.
+
+## Architecture Rules
+
+- One trigger per Salesforce object. Extend the TriggerHandler class — never create a second trigger on an object that already has one.
+- Layer all Apex: Trigger (delegate only, zero logic) → TriggerHandler (route by context) → Service (business logic, no SOQL) → Selector (all SOQL, inherited sharing).
+- No SOQL in Service or Handler classes — all queries go through a Selector class.
+- Selector classes use `inherited sharing`. Service and Handler classes use `with sharing`.
+
+## Testing Rules
+
+- Every new Apex class requires a paired test class. No exceptions.
+- Test classes must reach 90%+ code coverage.
+- Always include a bulk test method that inserts or processes 200 records.
+- Always use @IsTest(SeeAllData=false).
+- Use System.runAs() when the method under test uses Security.stripInaccessible() or WITH USER_MODE — running as System Admin strips fields silently and causes false passes.
+- Assert specific field values, not just record counts. Use System.assertEquals() with a message parameter.
+
+## Deployment Rules
+
+- Always validate (dry-run) before deploying: `sf project deploy validate --source-dir force-app --target-org <alias>`
+- Deploy in this order when multiple metadata types are involved: Custom Objects and Fields → Custom Metadata → Custom Settings → Custom Tabs → Permission Sets → Apex Classes → Apex Test Classes → Triggers → Flows → LWC → FlexiPages → Page Layouts → Profiles.
+- Never deploy without explicit user confirmation.
+- Custom Tabs must exist in the org before any Permission Set references them.
+- Object metadata fields enableBulkApi, enableSharing, and enableStreamingApi must all be the same boolean value.
+
+## API and CLI Rules
+
+- Always use API version 62.0 in all metadata files.
+- Use `sf` CLI v2 commands only — never `sfdx` (deprecated and removed).
+- Use `sf org login web` not `sfdx force:auth:web:login`.
+
+## Code Style
+
+- No AI-pattern comments. Never write: "This ensures that...", "It's important to note...", "is responsible for...", "This method handles...".
+- No em dashes in comments.
+- Class names: PascalCase. Methods: camelCase. Test classes: ClassNameTest. Selectors: ObjectNameSelector.
+- Short comments in plain English. Write like a human left a note, not like you're generating documentation.

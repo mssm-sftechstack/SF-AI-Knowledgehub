@@ -1,0 +1,44 @@
+{
+  "$schema": "https://forcedotcom.github.io/schemas/project/sfdx-project.schema.json",
+
+  "packageDirectories": [
+    {
+      // The main source directory for your Salesforce metadata.
+      // "path" is relative to this file. "default" marks which directory
+      // sf CLI uses when no --source-dir flag is given.
+      "path": "force-app",
+      "default": true,
+
+      // Package name and version are required if you plan to use
+      // Unlocked Packages. Leave as-is for org development (no packaging).
+      "package": "MyPackageName",
+      "versionName": "ver 0.1",
+      "versionNumber": "0.1.0.NEXT",
+      "versionDescription": "Initial development version"
+    }
+  ],
+
+  // The API version used for all metadata deploys and retrieves.
+  // Update this when you want to access new API features.
+  // As of early 2026 the current version is 62.0.
+  "sourceApiVersion": "62.0",
+
+  // Namespace for a managed package org. Leave blank for unmanaged
+  // org development or Unlocked Packages without a namespace.
+  "namespace": "",
+
+  "plugins": {
+    // sf CLI plugin configuration.
+    // Add plugin-specific settings here as needed.
+    // Example for sf-apex-plugin:
+    // "apexPlugin": { "option": "value" }
+  },
+
+  "packageAliases": {
+    // Maps human-readable names to Salesforce package/version IDs.
+    // Populated automatically when you create packages with sf package create.
+    // Example after first package version create:
+    // "MyPackageName": "0Ho...",
+    // "MyPackageName@0.1.0-1": "04t..."
+  }
+}
