@@ -5,11 +5,11 @@
 **SF architecture playbook for AI-assisted development.**
 Context templates for Claude Code, Cursor, Copilot, and Windsurf with multi-tenant guardrails, security model, Agentforce patterns, and DevOps workflows baked in.
 
-![Files](https://img.shields.io/badge/Files-54-blue?style=flat-square)
-![Sections](https://img.shields.io/badge/Sections-9-green?style=flat-square)
-![AI Tools](https://img.shields.io/badge/AI_Tools-5-purple?style=flat-square)
-![License](https://img.shields.io/badge/License-MIT-yellow?style=flat-square)
-![Contributions](https://img.shields.io/badge/Contributions-Welcome-orange?style=flat-square)
+[![Files](https://img.shields.io/badge/Files-54-blue?style=flat-square)](#whats-inside)
+[![Sections](https://img.shields.io/badge/Sections-9-green?style=flat-square)](#whats-inside)
+[![AI Tools](https://img.shields.io/badge/AI_Tools-5-purple?style=flat-square)](#quick-start)
+[![License](https://img.shields.io/badge/License-MIT-yellow?style=flat-square)](LICENSE)
+[![Contributions](https://img.shields.io/badge/Contributions-Welcome-orange?style=flat-square)](CONTRIBUTING.md)
 
 </div>
 
