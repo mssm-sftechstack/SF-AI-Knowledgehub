@@ -6,6 +6,14 @@ What works. What doesn't. What's still experimental. Read this before using the 
 
 ## Implementation Status
 
+### ✅ Complete CTA-Level Documentation (NEW)
+
+**14 New Documents Added**:
+- 9 Core Concepts: Order of Execution, Flow Best Practices, Integration, Security, LWC, Testing, Permissions, AI Pitfalls, Multi-Tenant Architecture
+- 5 Quick Reference Guides: SF CLI Cheatsheet, SOQL Anti-Patterns, Batch Apex Patterns, LWC Security, Test Data Patterns
+
+All documents follow CTA-level quality standards with code examples, anti-patterns with fixes, and decision trees.
+
 ### ✅ Fully Implemented
 
 **Context Templates** (production-ready within your own org)
@@ -82,7 +90,7 @@ What works. What doesn't. What's still experimental. Read this before using the 
 **Platform Cache Partition Management**
 - Why: Partitions can't be created via metadata API. They must be created manually in Setup UI.
 - Current workaround: Document your partition names and TTLs in a manual setup checklist.
-- Reference: [07-devops/deployment-strategy.md](07-devops/deployment-strategy.md#cross-phase-traps-that-cause-failures)
+- Reference: [DEPLOYMENT.md](DEPLOYMENT.md)
 
 **Scratch Org Seeding**
 - Why: Seed data is org-specific (accounts, contacts, permissions, custom settings).

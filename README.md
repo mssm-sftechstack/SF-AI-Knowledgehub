@@ -88,17 +88,89 @@ That's what this project does. One less round-trip. Fewer surprises in productio
 
 ## What's Here
 
+### Core Documentation
+
 | File | What It Covers |
 |------|---|
 | **[Vibe Coding Salesforce](vibe-coding-salesforce.md)** | How to use AI effectively in Salesforce. Safe patterns, constraints, workflows, component coverage. Start here if you're using Claude Code or other AI tools. |
 | **[Getting Started](GETTING_STARTED.md)** | Setup in 5 steps. Scratch orgs, templates, verification. |
-| **ARCHITECTURE.md** | Core patterns: 10 rules, layered Apex, bulkification, security, deployment order. |
-| **PATTERNS.md** | 8 reusable code examples. Trigger handlers, selectors, tests, LWC, Queueable. |
-| **DEPLOYMENT.md** | How to deploy. 16-phase order, CI/CD workflows, GitHub Actions templates. |
-| **USE_CASES.md** | Real scenarios. Debugging memory, SOQL optimization, trigger pattern reuse. |
-| **LIMITATIONS_AND_STATE.md** | What works, what's experimental, what isn't covered. |
+| **[ARCHITECTURE.md](ARCHITECTURE.md)** | Core patterns: 10 rules, layered Apex, bulkification, security, deployment order. |
+| **[PATTERNS.md](PATTERNS.md)** | 8 reusable code examples. Trigger handlers, selectors, tests, LWC, Queueable. |
+| **[DEPLOYMENT.md](DEPLOYMENT.md)** | How to deploy. 16-phase order, CI/CD workflows, GitHub Actions templates. |
+| **[USE_CASES.md](USE_CASES.md)** | Real scenarios. Debugging memory, SOQL optimization, trigger pattern reuse. |
+| **[Real-World Example: SOQL Limit Error](REAL_WORLD_EXAMPLE_SOQL_LIMIT.md)** | Step-by-step walkthrough: AI without context vs. AI with Salesforce constraints. Shows why context matters. |
+| **[LIMITATIONS_AND_STATE.md](LIMITATIONS_AND_STATE.md)** | What works, what's experimental, what isn't covered. |
+
+### Salesforce Core Concepts (9 Documents)
+
+| File | What It Covers |
+|------|---|
+| **[Order of Execution](ORDER_OF_EXECUTION.md)** | Trigger, flow, validation rule timing. Interaction matrix. When to use trigger vs. flow vs. process. |
+| **[Flow Best Practices](FLOW_BEST_PRACTICES.md)** | Subflows, error paths, async patterns, recursion prevention, performance limits. |
+| **[Integration Patterns](INTEGRATION.md)** | Callouts, Named Credentials, retry logic, timeout handling, rate limiting. |
+| **[Security Guardrails](SECURITY.md)** | CRUD, FLS, sharing rules, data masking, custom permissions, hardcoded ID prevention. |
+| **[LWC Best Practices](LWC_BEST_PRACTICES.md)** | Lifecycle, state management, error handling, accessibility, DOM access patterns. |
+| **[Testing Strategy](TESTING_STRATEGY.md)** | Unit vs. integration testing, bulk testing, async testing, 90%+ coverage patterns. |
+| **[Permission Model Design](PERMISSIONS.md)** | Permission Sets, custom permissions, field permissions, role hierarchy, testing with limited users. |
+| **[AI Pitfalls Matrix](AI_PITFALLS.md)** | What AI commonly gets wrong in Salesforce (12 pitfalls with fixes). |
+| **[Multi-Tenant Architecture](MULTITENANT.md)** | Resource contention, pod allocation, scaling, why limits exist, designing for scale. |
+
+### Reference Guides (5 Quick Lookups)
+
+| File | What It Covers |
+|------|---|
+| **[SF CLI Cheatsheet](reference/sf-cli-cheatsheet.md)** | Common CLI commands, flags, troubleshooting, useful aliases. |
+| **[SOQL Anti-Patterns](reference/soql-anti-patterns.md)** | Query optimization, selective filters, aggregate functions, index usage. |
+| **[Batch Apex Patterns](reference/batch-apex-patterns.md)** | Decision tree: Batch vs. Queueable vs. Scheduled. Examples with error handling. |
+| **[LWC Security](reference/lwc-security.md)** | XSS prevention, sanitization, safe DOM patterns, input validation. |
+| **[Test Data Patterns](reference/test-data-patterns.md)** | Factories, bulk setup, System.runAs(), assertions, edge cases. |
+
+### Utilities
+
+| Directory | Contents |
+|-----------|----------|
 | **templates/** | Ready-to-copy context files (CLAUDE.md, .cursorrules, etc.) |
-| **reference/** | Governor limits, deployment order, common errors, metadata types |
+| **skills/** | AI tool-agnostic skill guides for each component type |
+
+---
+
+## How to Use This by Role
+
+### Apex Developer
+
+Start with: [ARCHITECTURE.md](ARCHITECTURE.md) → [ORDER_OF_EXECUTION.md](ORDER_OF_EXECUTION.md) → [TESTING_STRATEGY.md](TESTING_STRATEGY.md)
+
+Then reference: [SOQL Anti-Patterns](reference/soql-anti-patterns.md), [Batch Apex Patterns](reference/batch-apex-patterns.md), [SECURITY.md](SECURITY.md)
+
+### LWC Developer
+
+Start with: [LWC_BEST_PRACTICES.md](LWC_BEST_PRACTICES.md) → [reference/lwc-security.md](reference/lwc-security.md) → [TESTING_STRATEGY.md](TESTING_STRATEGY.md)
+
+Then reference: [SECURITY.md](SECURITY.md), [reference/test-data-patterns.md](reference/test-data-patterns.md)
+
+### Flow Developer
+
+Start with: [FLOW_BEST_PRACTICES.md](FLOW_BEST_PRACTICES.md) → [ORDER_OF_EXECUTION.md](ORDER_OF_EXECUTION.md) → [SECURITY.md](SECURITY.md)
+
+Then reference: [TESTING_STRATEGY.md](TESTING_STRATEGY.md), [PERMISSIONS.md](PERMISSIONS.md), [AI_PITFALLS.md](AI_PITFALLS.md)
+
+### Integration Developer
+
+Start with: [INTEGRATION.md](INTEGRATION.md) → [SECURITY.md](SECURITY.md) → [reference/batch-apex-patterns.md](reference/batch-apex-patterns.md)
+
+Then reference: [TESTING_STRATEGY.md](TESTING_STRATEGY.md), [MULTITENANT.md](MULTITENANT.md)
+
+### Architect
+
+Start with: [MULTITENANT.md](MULTITENANT.md) → [ORDER_OF_EXECUTION.md](ORDER_OF_EXECUTION.md) → [PERMISSIONS.md](PERMISSIONS.md)
+
+Then reference: [ARCHITECTURE.md](ARCHITECTURE.md), [DEPLOYMENT.md](DEPLOYMENT.md), [SECURITY.md](SECURITY.md)
+
+### Using AI Tools (Claude Code, Cursor, Copilot)
+
+Start with: [Vibe Coding Salesforce](vibe-coding-salesforce.md) → [AI_PITFALLS.md](AI_PITFALLS.md) → templates/CLAUDE.md
+
+Then reference: [SECURITY.md](SECURITY.md), [TESTING_STRATEGY.md](TESTING_STRATEGY.md), [reference/soql-anti-patterns.md](reference/soql-anti-patterns.md)
 
 ---
 
@@ -117,7 +189,7 @@ These come from real Salesforce projects. Most are lessons learned the hard way.
 9. **90%+ test coverage plus a 200-record bulk test.** Code coverage percentage is misleading without bulk tests.
 10. **Validate before you deploy.** It catches surprises.
 
-See [03-architecture-guardrails](03-architecture-guardrails/README.md) for the full reasoning.
+See [ARCHITECTURE.md](ARCHITECTURE.md) for the full reasoning.
 
 ---
 
