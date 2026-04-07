@@ -688,4 +688,4 @@ Use this repo as your context library. Load it into your AI tool. Reference it i
 - [ARCHITECTURE.md](ARCHITECTURE.md) — Core patterns and rules
 - [PATTERNS.md](PATTERNS.md) — Reusable code examples
 - [DEPLOYMENT.md](DEPLOYMENT.md) — Deployment order and CI/CD
-- [LIMITATIONS_AND_STATE.md](LIMITATIONS_AND_STATE.md) — What's experimental and what gaps exist
+- [ARCHITECT_REVIEW_CONSTRAINTS.md](ARCHITECT_REVIEW_CONSTRAINTS.md) — Deep dive on limits and constraints

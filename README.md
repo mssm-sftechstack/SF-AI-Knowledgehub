@@ -1,461 +1,192 @@
-<div align="center">
-
 # SF-AI-Knowledgehub
 
-**Exploring AI-assisted Salesforce development with persistent context and memory.**
+**Using AI-assisted development effectively in Salesforce.**
 
-A collection of patterns, templates, and guardrails for Salesforce developers experimenting with AI tools. Not production-ready. This is a learning project.
+This is a learning project about combining AI coding tools with Salesforce best practices. It's not production code—it's a knowledge base exploring how to get meaningful results from AI when working within Salesforce constraints.
 
-[![License](https://img.shields.io/badge/License-MIT-yellow?style=flat-square)](LICENSE)
-[![Contributions](https://img.shields.io/badge/Contributions-Welcome-orange?style=flat-square)](CONTRIBUTING.md)
+## Why This Exists
 
-</div>
+If you've used ChatGPT or Claude for Salesforce code, you've probably hit these walls:
 
----
+- **Lost context between sessions.** You paste the same org details, API version, and governor limits into 20 different prompts. Tedious.
+- **Hidden complexity.** AI doesn't see your order of execution, flow quirks, or validation rule side effects unless you spell it out. It confidently generates code that doesn't work in your org.
+- **Flows are invisible.** Salesforce Flows are black boxes to AI tools. They don't show up in code, they're not in SOQL results, but they run in production and blow up your logic.
+- **Repetitive debugging.** You ask the same questions: "How do I bulkify this?" "What's the FLS pattern?" "Why doesn't my flow trigger?" Same answers, different prompts.
+- **Token waste.** You're paying per token. Getting bad code back costs money *and* wastes time.
 
-## Why This Project
+This project is an experiment in solving those problems.
 
-Most Salesforce developers hit the same wall with AI tools. Every new prompt, the AI forgets Salesforce rules. SOQL in loops. Hardcoded IDs. FLS gaps. You debug the same mistakes over and over.
+## What You'll Find Here
 
-The bigger issue: there's no way to carry lessons from one project to the next. You spend 4 hours debugging a query limit issue in March. In June, someone writes the same pattern. In September, it happens again. Each time you explain it. Each time someone debugs it.
+15 core documents covering:
 
-This project asks: what if you could encode those lessons upfront, load them into your AI tool, and catch the mistakes before code review?
+- **Order of Execution**: Understanding trigger→flow→validation rule interactions (with diagrams)
+- **Flows**: What they do, what they don't, and why AI doesn't see them
+- **Security**: FLS, CRUD, stripInaccessible patterns
+- **Bulkification**: Why you need it, how to structure for 200+ records
+- **Integration patterns**: Callouts, Named Credentials, External Credentials
+- **Testing strategy**: Coverage, data factories, assertion patterns
+- **SOQL & performance**: Anti-patterns, index usage, selective filters
+- **Apex, LWC, Platform Events, Cache**: Hands-on patterns with real code
 
----
+Each document includes:
+- Multi-component perspective (how it works from Apex vs LWC vs Flow)
+- Diagrams (sequence diagrams, flowcharts)
+- Code examples (current Apex 2025+, valid LWC, real Flow syntax)
+- Gotchas and constraints
 
-## What This Project Explores
+The goal isn't comprehensive coverage—it's teaching you what to *tell AI* so you get useful code back.
 
-This isn't about replacing engineers with AI. It's about answering four specific questions:
+## Real Example: Why Context Matters
 
-1. **Can context templates teach guardrails?** If you put Salesforce rules in a CLAUDE.md file, will the AI actually follow them?
-2. **What if the AI remembered your past projects?** What would it look like to carry debugging lessons and patterns forward?
-3. **Do better prompts actually reduce back-and-forth?** Or does the AI still miss security issues, bulk test failures, and order-of-execution problems?
-4. **Can teams share pattern libraries?** What would it take to build a shared library of trigger patterns, SOQL optimizations, and deployment lessons?
+You ask your AI tool:
 
-The patterns here come from real Salesforce projects (10+ years of implementations). The templates have been tested. But the overall system—how these pieces fit together in an AI workflow—that's still experimental.
+> "How do I query Contact records and update them?"
 
----
-
-## What This Isn't
-
-- **Not a deployment tool.** This teaches AI tools how to write correct code, not how to replace architects or senior engineers.
-- **Not battle-tested at scale.** These patterns work for the projects they came from. Your org may have different constraints.
-- **Not a substitute for code review.** You still need actual humans reviewing security, FLS checks, sharing rules, and deployment order.
-- **Not official Salesforce guidance.** These are community patterns. Always verify against [developer.salesforce.com](https://developer.salesforce.com).
-- **Memory systems are experimental.** Session memory works within a single project. Cross-project memory is harder and still being figured out.
-- **Different AI tools work differently.** A pattern that works in Claude Code might need tweaking for Cursor or Copilot.
-
-For a full breakdown of what's implemented, what's experimental, and what gaps exist, see [LIMITATIONS_AND_STATE.md](LIMITATIONS_AND_STATE.md).
-
----
-
-## How to Use This Responsibly
-
-This is a learning tool, not production infrastructure.
-
-- **Validate everything manually.** AI makes mistakes. Review the code, test edge cases, check FLS and sharing rules before deploying anywhere.
-- **Don't paste production data or credentials.** Keep your org context local. Never share real data in prompts or commit credentials to git.
-- **Test in scratch orgs and dev orgs only.** This is for experimenting with workflows, not for live customer systems.
-- **Use this to amplify good judgment, not replace it.** When in doubt, ask a senior engineer.
-
----
-
-## ⚠️ Critical: What AI Misses About Salesforce
-
-Before you write any prompt, understand these four blind spots:
-
-### 1. AI Can't See Flows (They're Invisible)
-
-Flows, validation rules, and processes run in the same transaction as your trigger. AI only sees Apex code.
-
-```mermaid
-graph TD
-    A["User Updates Account"] --> B["Trigger Fires"]
-    B --> B1["AI-Generated Code Runs"]
-    B1 --> C["Record Updated"]
-    C --> D["🚨 HIDDEN: Flow Executes<br/>(AI Doesn't Know About It)"]
-    D --> E["Flow Updates Same Record"]
-    E --> F["Trigger Fires Again<br/>(Recursion Risk)"]
-    
-    style D fill:#ffcccc
-    style F fill:#ffcccc
-```
-
-**Fix**: Tell AI about the Flow in your prompt. See [ARCHITECT_REVIEW_CONSTRAINTS.md](ARCHITECT_REVIEW_CONSTRAINTS.md).
-
-### 2. Bulk = 200 Records, Not 1
-
-Governor limits are per-transaction. A trigger handling 200 records at once will hit limits that single-record code never touches.
-
-| Scenario | SOQL Queries | AI Code | Result |
-|----------|--------------|---------|---------|
-| 1 account updates | 1 query in loop | Works | ✅ Pass |
-| 200 accounts update | 200 queries in loop | Same code | ❌ SOQL 101 limit error |
-
-**Why AI Misses It**: Thinks "the user probably updates one at a time" (wrong).
-
-### 3. Sharing Rules Enforce at Database Level
-
-You can't bypass FLS or sharing rules with code. `with sharing` on your class and `WITH SECURITY_ENFORCED` on SOQL are mandatory.
-
+Without context, you get:
 ```apex
-// ❌ AI often skips this
-List<Account> accounts = [SELECT Id, Name FROM Account];
-
-// ✅ Required
-public with sharing class AccountService {
-  public static List<Account> getAccounts() {
-    return [SELECT Id, Name FROM Account WITH SECURITY_ENFORCED];
-  }
+List<Contact> contacts = [SELECT Id, Name FROM Contact];
+for (Contact c : contacts) {
+    c.LastName = 'Updated';
+    update c;  // ← Loop update, fails at 150 DML limit
 }
 ```
 
-**Why AI Misses It**: No concept of multi-tenant security. Assumes "the code runs with admin permissions" (wrong).
+With minimal context ("bulkify for 200+ records, enforce FLS"):
 
-### 4. Order of Execution Has Hidden Complexity
+> "I need to query and update Contact records. The org has 150 DML operations per transaction. There are likely 200+ records. Enforce field-level security."
 
-Triggers, Flows, validations, and async processes run in a specific order. A change in one triggers another.
-
-**See**: [ORDER_OF_EXECUTION.md](ORDER_OF_EXECUTION.md) for the full execution path.
-
----
-
-## Recursion Risk: Trigger + Flow Conflict
-
-This is the most common hidden bug. AI generates it regularly.
-
-```mermaid
-sequenceDiagram
-    participant User
-    participant Trigger as After Update Trigger
-    participant Flow as Record-Triggered Flow
-    participant Account as Account Record
-    
-    User->>Account: Update Status
-    Account->>Trigger: Fire (Transaction 1)
-    Trigger->>Account: Update TotalRevenue (no guard)
-    Account->>Flow: Detect Update (Transaction 2)
-    Flow->>Account: Update LastChangedDate
-    Account->>Trigger: Fire Again (Recursion)
-    Trigger->>Account: Update TotalRevenue again
-    Account->>Flow: Detect Update again
-    Note over Account: 🔄 Infinite re-entry risk
-```
-
-**How to Fix**:
-
+You get:
 ```apex
-// In Trigger: Guard against re-entry
-public class AccountTriggerHandler {
-  private static Boolean processing = false;
-  
-  public static void handleAfterUpdate(List<Account> accounts) {
-    if (processing) return;  // Already running, exit
-    
-    processing = true;
-    try {
-      // ... your logic
-      update accounts;
-    } finally {
-      processing = false;
-    }
-  }
+List<Contact> contacts = [SELECT Id, Name FROM Contact WHERE IsDeleted = false LIMIT 10000];
+List<Contact> toUpdate = new List<Contact>();
+for (Contact c : contacts) {
+    c.LastName = 'Updated';
+    toUpdate.add(c);
+}
+if (!toUpdate.isEmpty()) {
+    Security.stripInaccessible(AccessType.UPDATABLE, toUpdate);
+    update toUpdate;
 }
 ```
 
-**See**: [ARCHITECT_REVIEW_CONSTRAINTS.md](ARCHITECT_REVIEW_CONSTRAINTS.md#2-order-of-execution-where-hidden-complexity-lives) for details.
+Same question, 10 seconds of context setup, completely different output.
 
----
+## Salesforce Constraints You Need to Know
 
-## Before Accepting AI Code: 12-Point Checklist
+**Order of Execution** (triggers → flows → validation rules):
+- A trigger runs and updates a field
+- A flow sees that change and fires
+- A validation rule sees the flow's changes and blocks the save
+- Your logic fails in unexpected places because you didn't know the order
 
-| Check | Why |
-|-------|-----|
-| Does it query in a loop? | SOQL 101 limit (100 queries per transaction) |
-| Does it DML in a loop? | DML 150 limit (150 DML statements per transaction) |
-| Will 200 records break it? | Standard bulk size in Salesforce |
-| Did you mention Flows/validations? | Invisible to AI; must be in prompt |
-| Does it have a recursion guard? | Trigger + Flow can re-enter infinitely |
-| Is it marked `with sharing`? | Default: enforce sharing rules |
-| Does it use `WITH SECURITY_ENFORCED`? | Default: enforce FLS |
-| Did you test with non-admin user? | FLS/sharing only visible with limited user |
-| Is there a try-catch in trigger? | Exceptions in triggers roll back all DML |
-| Did you test with 200 records? | Single-record code often fails at scale |
-| Was no real org data pasted? | Privacy/compliance risk |
-| Did a human review it? | AI catches obvious bugs, not logic gaps |
+**Flows are not in code**:
+- Flows don't appear in `[SELECT ... FROM Contact]` results
+- They don't trigger SOQL or DML limits
+- But they run after your Apex and can cause cascading failures
+- You must *tell AI* about them—they won't find them by reading code
 
-**Fail any check?** Don't submit. Fix it first.
+**Bulkification**:
+- Not optional—it's a hard constraint
+- SOQL limit: 100 queries per transaction
+- DML limit: 150 operations per transaction
+- Design for at least 200 records or you'll fail in production
 
-**See**: [ARCHITECT_REVIEW_CONSTRAINTS.md](ARCHITECT_REVIEW_CONSTRAINTS.md#checklist-before-accepting-ai-generated-code) for full checklist.
+**CPU time, heap size, governor limits**:
+- 10 seconds of CPU time (synchronous)
+- 6 MB heap (synchronous)
+- 12 MB heap (asynchronous)
+- AI-generated code often ignores these. You can't.
 
----
+## Security & Responsible Use
 
-## What AI Can See vs. What It Can't
+**Do not paste production data** (account numbers, customer emails, real records). Ever.
 
-```mermaid
-graph LR
-    A["AI Prompt"] --> B["✅ Can See"]
-    A --> C["❌ Can't See"]
-    
-    B --> B1["Apex Code"]
-    B --> B2["Apex Comments<br/>in Prompt"]
-    B --> B3["Your Instructions<br/>in CLAUDE.md"]
-    
-    C --> C1["Flows"]
-    C --> C2["Validation Rules"]
-    C --> C3["Process Builder"]
-    C --> C4["Field History"]
-    C --> C5["Sharing Rules"]
-    C --> C6["Permission Sets"]
-    
-    style B fill:#e8f5e9
-    style C fill:#ffebee
-    style B1 fill:#c8e6c9
-    style B2 fill:#c8e6c9
-    style B3 fill:#c8e6c9
-    style C1 fill:#ffcccc
-    style C2 fill:#ffcccc
-    style C3 fill:#ffcccc
-    style C4 fill:#ffcccc
-    style C5 fill:#ffcccc
-    style C6 fill:#ffcccc
-```
+**Be careful with metadata.** Custom field IDs, flow definitions, and permission set assignments can leak org details. Scrub before sharing.
 
-**Bottom line**: If it's not in Apex code or your prompt, AI won't know about it. That's a prompt problem, not an AI problem.
+**Always validate AI code before deployment.** AI is a productivity tool, not a replacement for code review. Test with 200+ records. Run security review. Check FLS and CRUD.
 
----
+**Use this for learning, not copy-paste to prod.** The patterns here are reference implementations. Your org is unique. Adapt, don't copy directly.
 
-## Real Example: Debugging a Query Limit Bug
+## How to Use This Repo
 
-Your trigger hits 101 queries in production. Here's what happens with and without context.
+1. **Read the docs** that match your current problem (debugging a trigger? Check Order of Execution. Calling an external API? Check Integration.)
+2. **Understand the pattern** — why it works, what constraints matter, what can go wrong
+3. **Bring that context to your AI tool.** Don't just ask "How do I...?" — explain your org's limits and constraints
+4. **Validate the output.** Test with realistic data. Run security review before deploying
 
-**Without context files:**
-```
-Dev: "My trigger queries inside a loop. Fix it."
-AI: Rewrites with a map. But forgets WITH SECURITY_ENFORCED.
-Result: Code review catches the FLS bug. Two iterations. No bulk test written.
-```
+The docs are written for AI too—you can paste relevant sections into your prompts to give context.
 
-**With CLAUDE.md loaded:**
-```
-AI reads the hard rules:
-- Never SOQL or DML inside loops
-- Always use WITH SECURITY_ENFORCED  
-- Always write a 200-record bulk test
+## What This Is Not
 
-AI rewrites the query, adds WITH SECURITY_ENFORCED, writes the bulk test.
-Result: Catches the FLS issue and the query limit before code review. One iteration.
-```
+- Not a production system or framework
+- Not Salesforce official documentation (though it references it)
+- Not a replacement for code review or testing
+- Not "AI coding solved"—it's "here's what we learned about using AI in Salesforce"
 
-That's what this project does. One less round-trip. Fewer surprises in production.
+## What's Included
 
----
+### Core Concepts (9 Documents)
+- **Order of Execution**: Trigger, flow, validation rule timing and interactions
+- **Flow Best Practices**: Types, constraints, recursion prevention, performance
+- **Integration Patterns**: Callouts, Named Credentials, retry logic, timeout handling
+- **Security Guardrails**: CRUD, FLS, sharing rules, data masking, custom permissions
+- **LWC Best Practices**: Lifecycle, state management, error handling, accessibility
+- **Testing Strategy**: Unit vs integration, bulk testing, 90%+ coverage patterns
+- **Permission Model Design**: Permission Sets, custom permissions, field permissions, role hierarchy
+- **AI Pitfalls Matrix**: 12 common mistakes AI makes in Salesforce (with fixes)
+- **Multi-Tenant Architecture**: Resource contention, scaling, why limits exist
 
-## What's Here
+### Real-World Examples (2 Documents)
+- **SOQL Limit Error**: Step-by-step walkthrough of AI without context vs with Salesforce constraints
+- **Trigger + Flow Recursion**: Hidden bug scenario, bad code, improved response with context
 
-### Salesforce Development Ecosystem
+### Quick Reference (9 Guides)
+- Governor limits, SOQL anti-patterns, Batch Apex patterns, LWC security, test data patterns
+- SF CLI cheatsheet, common errors, metadata types, deployment order
 
-```mermaid
-graph TD
-    A["Salesforce Platform"] --> B["Execution Layer"]
-    A --> C["Data Layer"]
-    A --> D["UI Layer"]
-    
-    B --> B1["Triggers & Apex"]
-    B --> B2["Flows & Automation"]
-    B --> B3["Batch & Async"]
-    
-    C --> C1["SOQL & Database"]
-    C --> C2["Security & FLS"]
-    C --> C3["Sharing & Access"]
-    
-    D --> D1["LWC Components"]
-    D --> D2["Lightning Pages"]
-    D --> D3["Screen Flows"]
-    
-    B1 --> E["Order of Execution"]
-    B2 --> E
-    B3 --> E
-    
-    C1 --> F["Testing & Validation"]
-    C2 --> F
-    C3 --> F
-    
-    D1 --> F
-    D2 --> F
-    D3 --> F
-    
-    E --> G["Deployment"]
-    F --> G
-    
-    G --> H["Production"]
-    
-    style A fill:#e3f2fd
-    style B fill:#f3e5f5
-    style C fill:#fff3e0
-    style D fill:#e8f5e9
-    style E fill:#fce4ec
-    style F fill:#f1f8e9
-    style G fill:#ede7f6
-    style H fill:#c8e6c9
-```
+### Ready-to-Use Templates
+- CLAUDE.md for Claude Code
+- .cursorrules for Cursor
+- copilot-instructions.md for GitHub Copilot
+- AGENTS.md for any AI tool
 
-**Navigation**: Start with your role above → Read core concepts → Reference guides as needed → See templates for CLAUDE.md
+### Getting Started
+- Setup in 5 steps
+- Architecture overview
+- Reusable code patterns
+- Deployment playbook
+- How to contribute
 
-### Core Documentation
+## Quick Start
 
-| File | What It Covers |
-|------|---|
-| **[Vibe Coding Salesforce](vibe-coding-salesforce.md)** | How to use AI effectively in Salesforce. Safe patterns, constraints, workflows, component coverage. Start here if you're using Claude Code or other AI tools. |
-| **[Getting Started](GETTING_STARTED.md)** | Setup in 5 steps. Scratch orgs, templates, verification. |
-| **[ARCHITECTURE.md](ARCHITECTURE.md)** | Core patterns: 10 rules, layered Apex, bulkification, security, deployment order. |
-| **[PATTERNS.md](PATTERNS.md)** | 8 reusable code examples. Trigger handlers, selectors, tests, LWC, Queueable. |
-| **[DEPLOYMENT.md](DEPLOYMENT.md)** | How to deploy. 16-phase order, CI/CD workflows, GitHub Actions templates. |
-| **[USE_CASES.md](USE_CASES.md)** | Real scenarios. Debugging memory, SOQL optimization, trigger pattern reuse. |
-| **[Real-World Example: SOQL Limit Error](REAL_WORLD_EXAMPLE_SOQL_LIMIT.md)** | Step-by-step walkthrough: AI without context vs. AI with Salesforce constraints. Shows why context matters. |
-| **[AI Tool Quick Start](AI_TOOL_QUICK_START.md)** | ⚠️ **START HERE if using Claude Code, Cursor, or ChatGPT.** Prompt formula, reading list, checklist, templates (CLAUDE.md), red flags. 80 min to master Salesforce constraints. |
-| **[Real-World AI Failure & Fix](REAL_WORLD_AI_FAILURE_AND_FIX.md)** | Trigger + Flow recursion scenario. Shows bad code, AI response without context, improved response with context, refactored solution. |
-| **[Architect Review: Constraints](ARCHITECT_REVIEW_CONSTRAINTS.md)** | Deep dive: Governor limits (SOQL 100, DML 150), execution order, Flow blindness, security model, 12-point checklist. Reference for architects and seniors. |
-| **[LIMITATIONS_AND_STATE.md](LIMITATIONS_AND_STATE.md)** | What works, what's experimental, what isn't covered. |
-
-### Salesforce Core Concepts (9 Documents)
-
-| File | What It Covers |
-|------|---|
-| **[Order of Execution](ORDER_OF_EXECUTION.md)** | Trigger, flow, validation rule timing. Interaction matrix. When to use trigger vs. flow vs. process. |
-| **[Flow Best Practices](FLOW_BEST_PRACTICES.md)** | Subflows, error paths, async patterns, recursion prevention, performance limits. |
-| **[Integration Patterns](INTEGRATION.md)** | Callouts, Named Credentials, retry logic, timeout handling, rate limiting. |
-| **[Security Guardrails](SECURITY.md)** | CRUD, FLS, sharing rules, data masking, custom permissions, hardcoded ID prevention. |
-| **[LWC Best Practices](LWC_BEST_PRACTICES.md)** | Lifecycle, state management, error handling, accessibility, DOM access patterns. |
-| **[Testing Strategy](TESTING_STRATEGY.md)** | Unit vs. integration testing, bulk testing, async testing, 90%+ coverage patterns. |
-| **[Permission Model Design](PERMISSIONS.md)** | Permission Sets, custom permissions, field permissions, role hierarchy, testing with limited users. |
-| **[AI Pitfalls Matrix](AI_PITFALLS.md)** | What AI commonly gets wrong in Salesforce (12 pitfalls with fixes). |
-| **[Multi-Tenant Architecture](MULTITENANT.md)** | Resource contention, pod allocation, scaling, why limits exist, designing for scale. |
-
-### Reference Guides (5 Quick Lookups)
-
-| File | What It Covers |
-|------|---|
-| **[SF CLI Cheatsheet](reference/sf-cli-cheatsheet.md)** | Common CLI commands, flags, troubleshooting, useful aliases. |
-| **[SOQL Anti-Patterns](reference/soql-anti-patterns.md)** | Query optimization, selective filters, aggregate functions, index usage. |
-| **[Batch Apex Patterns](reference/batch-apex-patterns.md)** | Decision tree: Batch vs. Queueable vs. Scheduled. Examples with error handling. |
-| **[LWC Security](reference/lwc-security.md)** | XSS prevention, sanitization, safe DOM patterns, input validation. |
-| **[Test Data Patterns](reference/test-data-patterns.md)** | Factories, bulk setup, System.runAs(), assertions, edge cases. |
-
-### Utilities
-
-| Directory | Contents |
-|-----------|----------|
-| **templates/** | Ready-to-copy context files (CLAUDE.md, .cursorrules, etc.) |
-| **skills/** | AI tool-agnostic skill guides for each component type |
-
----
-
-## How to Use This by Role
-
-### Apex Developer
-
-Start with: [ARCHITECTURE.md](ARCHITECTURE.md) → [ORDER_OF_EXECUTION.md](ORDER_OF_EXECUTION.md) → [TESTING_STRATEGY.md](TESTING_STRATEGY.md)
-
-Then reference: [SOQL Anti-Patterns](reference/soql-anti-patterns.md), [Batch Apex Patterns](reference/batch-apex-patterns.md), [SECURITY.md](SECURITY.md)
-
-### LWC Developer
-
-Start with: [LWC_BEST_PRACTICES.md](LWC_BEST_PRACTICES.md) → [reference/lwc-security.md](reference/lwc-security.md) → [TESTING_STRATEGY.md](TESTING_STRATEGY.md)
-
-Then reference: [SECURITY.md](SECURITY.md), [reference/test-data-patterns.md](reference/test-data-patterns.md)
-
-### Flow Developer
-
-Start with: [FLOW_BEST_PRACTICES.md](FLOW_BEST_PRACTICES.md) → [ORDER_OF_EXECUTION.md](ORDER_OF_EXECUTION.md) → [SECURITY.md](SECURITY.md)
-
-Then reference: [TESTING_STRATEGY.md](TESTING_STRATEGY.md), [PERMISSIONS.md](PERMISSIONS.md), [AI_PITFALLS.md](AI_PITFALLS.md)
-
-### Integration Developer
-
-Start with: [INTEGRATION.md](INTEGRATION.md) → [SECURITY.md](SECURITY.md) → [reference/batch-apex-patterns.md](reference/batch-apex-patterns.md)
-
-Then reference: [TESTING_STRATEGY.md](TESTING_STRATEGY.md), [MULTITENANT.md](MULTITENANT.md)
-
-### Architect
-
-Start with: [MULTITENANT.md](MULTITENANT.md) → [ORDER_OF_EXECUTION.md](ORDER_OF_EXECUTION.md) → [PERMISSIONS.md](PERMISSIONS.md)
-
-Then reference: [ARCHITECTURE.md](ARCHITECTURE.md), [DEPLOYMENT.md](DEPLOYMENT.md), [SECURITY.md](SECURITY.md)
-
-### Using AI Tools (Claude Code, Cursor, Copilot)
-
-⚠️ **Start with: [AI_TOOL_QUICK_START.md](AI_TOOL_QUICK_START.md) (80 minutes)**
-- Prompt formula (what to tell AI)
-- Reading list (governor limits, flow blindness, recursion)
-- Checklist (before submitting any code)
-- Templates (CLAUDE.md, test class)
-- Red flags (what to reject)
-
-Then: [ARCHITECT_REVIEW_CONSTRAINTS.md](ARCHITECT_REVIEW_CONSTRAINTS.md) → [REAL_WORLD_AI_FAILURE_AND_FIX.md](REAL_WORLD_AI_FAILURE_AND_FIX.md) → [Vibe Coding Salesforce](vibe-coding-salesforce.md)
-
-Reference: [SECURITY.md](SECURITY.md), [TESTING_STRATEGY.md](TESTING_STRATEGY.md), [AI_PITFALLS.md](AI_PITFALLS.md), [ORDER_OF_EXECUTION.md](ORDER_OF_EXECUTION.md), [reference/soql-anti-patterns.md](reference/soql-anti-patterns.md)
-
----
-
-## The 10 Core Rules
-
-These come from real Salesforce projects. Most are lessons learned the hard way.
-
-1. **No SOQL or DML inside loops.** You'll hit the 101 query limit.
-2. **Bulkify for 200+ records.** Dev has 50. Production has 50,000.
-3. **Use `with sharing` on every Apex class.** It respects your org's sharing rules.
-4. **Use Permission Sets, not Profiles.** Profiles are legacy.
-5. **Use `WITH SECURITY_ENFORCED` in every SOQL query.** FLS doesn't enforce itself.
-6. **No hardcoded IDs or credentials.** It works in dev. Breaks everywhere else.
-7. **One trigger per object.** Extend the handler, never create a second trigger.
-8. **No callouts from trigger context.** Use Queueable with Database.AllowsCallouts instead.
-9. **90%+ test coverage plus a 200-record bulk test.** Code coverage percentage is misleading without bulk tests.
-10. **Validate before you deploy.** It catches surprises.
-
-See [ARCHITECTURE.md](ARCHITECTURE.md) for the full reasoning.
-
----
-
-## How to Use This
+**New to this repo?**
+1. Read [Order of Execution](ORDER_OF_EXECUTION.md) — understand how Salesforce runs code
+2. Read [Architecture](ARCHITECTURE.md) — the 10 core rules and why they matter
+3. Copy a [template](templates/) into your project and customize it for your org
+4. Reference docs as you build
 
 **Using AI tools (Claude Code, Cursor, Copilot)?**
+1. Copy a [template](templates/) into your project
+2. Fill in your org details (org alias, API version, instance URL)
+3. Ask your AI tool to list Salesforce hard rules — it should cite your template
 
-1. Read **[Vibe Coding Salesforce](vibe-coding-salesforce.md)** (15 minutes). Learn safe patterns and workflows.
-2. Copy [templates/CLAUDE.md](templates/CLAUDE.md) into your project. Load it into your AI tool.
-3. Reference [PATTERNS.md](PATTERNS.md) and [ARCHITECTURE.md](ARCHITECTURE.md) in your AI prompts.
+**Building something specific?**
+- Check [Patterns](PATTERNS.md) for code examples
+- Check [Real-World Examples](REAL_WORLD_EXAMPLE_SOQL_LIMIT.md) for scenarios
+- Browse [Reference](reference/) for quick lookups
 
-**First time here?**
+## Contributing
 
-1. Read [GETTING_STARTED.md](GETTING_STARTED.md) (5 minutes). Copy a template into your project.
-2. Read [ARCHITECTURE.md](ARCHITECTURE.md) (30 minutes). Understand the 10 core rules and why they matter.
-3. Read [USE_CASES.md](USE_CASES.md). See how patterns help in real scenarios.
+Found a pattern that works? Have a lesson from production? See [Contributing](CONTRIBUTING.md).
 
-**Building something?**
-
-1. Look at [PATTERNS.md](PATTERNS.md) for reusable code examples. Copy what fits.
-2. Check [ARCHITECTURE.md](ARCHITECTURE.md) for security, bulkification, and testing rules.
-3. Use [DEPLOYMENT.md](DEPLOYMENT.md) when you're ready to deploy.
-
-**Reference materials**
-
-- [reference/governor-limits.md](reference/governor-limits.md) — Quick lookup for query limits, DML limits, etc.
-- [reference/deployment-order.md](reference/deployment-order.md) — What deploys before what.
-- [reference/common-errors.md](reference/common-errors.md) — What went wrong and how to fix it.
-
-**Contributing?**
-
-Found a pattern that works? Security lesson? See [CONTRIBUTING.md](CONTRIBUTING.md).
-
----
+This is a community project. The more patterns we document, the faster teams can move confidently with AI.
 
 ## Who Built This
 
-Sai Shyam (Salesforce Technical Lead, 10+ years of implementations) designed the patterns. Claude helped structure and write the docs.
+Based on 10+ years of Salesforce implementation experience. Designed to help developers, teams, and organizations use AI effectively within Salesforce best practices.
 
-This is a side project, not an official Salesforce product. It's open source so other teams can learn from it and improve it.
-
----
+Not an official Salesforce product. Open source so others can learn, improve, and share.
 
 ## License
 

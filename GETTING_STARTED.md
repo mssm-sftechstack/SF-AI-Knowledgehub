@@ -80,7 +80,7 @@ See ARCHITECTURE.md for the core patterns:
 
 ## What's Next
 
-- **Real examples**: See USE_CASES.md for three scenarios showing how memory and patterns help
+- **Real examples**: See REAL_WORLD_EXAMPLE_SOQL_LIMIT.md and REAL_WORLD_AI_FAILURE_AND_FIX.md for practical scenarios
 - **Deployment**: See DEPLOYMENT.md for the 16-phase deployment order and CI/CD setup
 - **Reusable patterns**: See PATTERNS.md for trigger handlers, service layers, and query patterns
 - **Reference**: See reference/ folder for governor limits, common errors, and metadata types
@@ -101,4 +101,4 @@ Install the CLI globally: `npm install -g @salesforce/cli`
 Open the template file and update the org alias and instance URL. Save. Restart the tool.
 
 **"I don't know what to do next"**
-Start with [ARCHITECTURE.md](ARCHITECTURE.md). Read the 10 core rules. Then look at [USE_CASES.md](USE_CASES.md) for real examples of how this helps.
+Start with [ARCHITECTURE.md](ARCHITECTURE.md). Read the 10 core rules. Then see [REAL_WORLD_EXAMPLE_SOQL_LIMIT.md](REAL_WORLD_EXAMPLE_SOQL_LIMIT.md) for practical examples.
