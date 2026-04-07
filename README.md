@@ -60,6 +60,171 @@ This is a learning tool, not production infrastructure.
 
 ---
 
+## ⚠️ Critical: What AI Misses About Salesforce
+
+Before you write any prompt, understand these four blind spots:
+
+### 1. AI Can't See Flows (They're Invisible)
+
+Flows, validation rules, and processes run in the same transaction as your trigger. AI only sees Apex code.
+
+```mermaid
+graph TD
+    A["User Updates Account"] --> B["Trigger Fires"]
+    B --> B1["AI-Generated Code Runs"]
+    B1 --> C["Record Updated"]
+    C --> D["🚨 HIDDEN: Flow Executes<br/>(AI Doesn't Know About It)"]
+    D --> E["Flow Updates Same Record"]
+    E --> F["Trigger Fires Again<br/>(Recursion Risk)"]
+    
+    style D fill:#ffcccc
+    style F fill:#ffcccc
+```
+
+**Fix**: Tell AI about the Flow in your prompt. See [ARCHITECT_REVIEW_CONSTRAINTS.md](ARCHITECT_REVIEW_CONSTRAINTS.md).
+
+### 2. Bulk = 200 Records, Not 1
+
+Governor limits are per-transaction. A trigger handling 200 records at once will hit limits that single-record code never touches.
+
+| Scenario | SOQL Queries | AI Code | Result |
+|----------|--------------|---------|---------|
+| 1 account updates | 1 query in loop | Works | ✅ Pass |
+| 200 accounts update | 200 queries in loop | Same code | ❌ SOQL 101 limit error |
+
+**Why AI Misses It**: Thinks "the user probably updates one at a time" (wrong).
+
+### 3. Sharing Rules Enforce at Database Level
+
+You can't bypass FLS or sharing rules with code. `with sharing` on your class and `WITH SECURITY_ENFORCED` on SOQL are mandatory.
+
+```apex
+// ❌ AI often skips this
+List<Account> accounts = [SELECT Id, Name FROM Account];
+
+// ✅ Required
+public with sharing class AccountService {
+  public static List<Account> getAccounts() {
+    return [SELECT Id, Name FROM Account WITH SECURITY_ENFORCED];
+  }
+}
+```
+
+**Why AI Misses It**: No concept of multi-tenant security. Assumes "the code runs with admin permissions" (wrong).
+
+### 4. Order of Execution Has Hidden Complexity
+
+Triggers, Flows, validations, and async processes run in a specific order. A change in one triggers another.
+
+**See**: [ORDER_OF_EXECUTION.md](ORDER_OF_EXECUTION.md) for the full execution path.
+
+---
+
+## Recursion Risk: Trigger + Flow Conflict
+
+This is the most common hidden bug. AI generates it regularly.
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant Trigger as After Update Trigger
+    participant Flow as Record-Triggered Flow
+    participant Account as Account Record
+    
+    User->>Account: Update Status
+    Account->>Trigger: Fire (Transaction 1)
+    Trigger->>Account: Update TotalRevenue (no guard)
+    Account->>Flow: Detect Update (Transaction 2)
+    Flow->>Account: Update LastChangedDate
+    Account->>Trigger: Fire Again (Recursion)
+    Trigger->>Account: Update TotalRevenue again
+    Account->>Flow: Detect Update again
+    Note over Account: 🔄 Infinite re-entry risk
+```
+
+**How to Fix**:
+
+```apex
+// In Trigger: Guard against re-entry
+public class AccountTriggerHandler {
+  private static Boolean processing = false;
+  
+  public static void handleAfterUpdate(List<Account> accounts) {
+    if (processing) return;  // Already running, exit
+    
+    processing = true;
+    try {
+      // ... your logic
+      update accounts;
+    } finally {
+      processing = false;
+    }
+  }
+}
+```
+
+**See**: [ARCHITECT_REVIEW_CONSTRAINTS.md](ARCHITECT_REVIEW_CONSTRAINTS.md#2-order-of-execution-where-hidden-complexity-lives) for details.
+
+---
+
+## Before Accepting AI Code: 12-Point Checklist
+
+| Check | Why |
+|-------|-----|
+| Does it query in a loop? | SOQL 101 limit (100 queries per transaction) |
+| Does it DML in a loop? | DML 150 limit (150 DML statements per transaction) |
+| Will 200 records break it? | Standard bulk size in Salesforce |
+| Did you mention Flows/validations? | Invisible to AI; must be in prompt |
+| Does it have a recursion guard? | Trigger + Flow can re-enter infinitely |
+| Is it marked `with sharing`? | Default: enforce sharing rules |
+| Does it use `WITH SECURITY_ENFORCED`? | Default: enforce FLS |
+| Did you test with non-admin user? | FLS/sharing only visible with limited user |
+| Is there a try-catch in trigger? | Exceptions in triggers roll back all DML |
+| Did you test with 200 records? | Single-record code often fails at scale |
+| Was no real org data pasted? | Privacy/compliance risk |
+| Did a human review it? | AI catches obvious bugs, not logic gaps |
+
+**Fail any check?** Don't submit. Fix it first.
+
+**See**: [ARCHITECT_REVIEW_CONSTRAINTS.md](ARCHITECT_REVIEW_CONSTRAINTS.md#checklist-before-accepting-ai-generated-code) for full checklist.
+
+---
+
+## What AI Can See vs. What It Can't
+
+```mermaid
+graph LR
+    A["AI Prompt"] --> B["✅ Can See"]
+    A --> C["❌ Can't See"]
+    
+    B --> B1["Apex Code"]
+    B --> B2["Apex Comments<br/>in Prompt"]
+    B --> B3["Your Instructions<br/>in CLAUDE.md"]
+    
+    C --> C1["Flows"]
+    C --> C2["Validation Rules"]
+    C --> C3["Process Builder"]
+    C --> C4["Field History"]
+    C --> C5["Sharing Rules"]
+    C --> C6["Permission Sets"]
+    
+    style B fill:#e8f5e9
+    style C fill:#ffebee
+    style B1 fill:#c8e6c9
+    style B2 fill:#c8e6c9
+    style B3 fill:#c8e6c9
+    style C1 fill:#ffcccc
+    style C2 fill:#ffcccc
+    style C3 fill:#ffcccc
+    style C4 fill:#ffcccc
+    style C5 fill:#ffcccc
+    style C6 fill:#ffcccc
+```
+
+**Bottom line**: If it's not in Apex code or your prompt, AI won't know about it. That's a prompt problem, not an AI problem.
+
+---
+
 ## Real Example: Debugging a Query Limit Bug
 
 Your trigger hits 101 queries in production. Here's what happens with and without context.
@@ -148,6 +313,9 @@ graph TD
 | **[DEPLOYMENT.md](DEPLOYMENT.md)** | How to deploy. 16-phase order, CI/CD workflows, GitHub Actions templates. |
 | **[USE_CASES.md](USE_CASES.md)** | Real scenarios. Debugging memory, SOQL optimization, trigger pattern reuse. |
 | **[Real-World Example: SOQL Limit Error](REAL_WORLD_EXAMPLE_SOQL_LIMIT.md)** | Step-by-step walkthrough: AI without context vs. AI with Salesforce constraints. Shows why context matters. |
+| **[AI Tool Quick Start](AI_TOOL_QUICK_START.md)** | ⚠️ **START HERE if using Claude Code, Cursor, or ChatGPT.** Prompt formula, reading list, checklist, templates (CLAUDE.md), red flags. 80 min to master Salesforce constraints. |
+| **[Real-World AI Failure & Fix](REAL_WORLD_AI_FAILURE_AND_FIX.md)** | Trigger + Flow recursion scenario. Shows bad code, AI response without context, improved response with context, refactored solution. |
+| **[Architect Review: Constraints](ARCHITECT_REVIEW_CONSTRAINTS.md)** | Deep dive: Governor limits (SOQL 100, DML 150), execution order, Flow blindness, security model, 12-point checklist. Reference for architects and seniors. |
 | **[LIMITATIONS_AND_STATE.md](LIMITATIONS_AND_STATE.md)** | What works, what's experimental, what isn't covered. |
 
 ### Salesforce Core Concepts (9 Documents)
@@ -217,9 +385,16 @@ Then reference: [ARCHITECTURE.md](ARCHITECTURE.md), [DEPLOYMENT.md](DEPLOYMENT.m
 
 ### Using AI Tools (Claude Code, Cursor, Copilot)
 
-Start with: [Vibe Coding Salesforce](vibe-coding-salesforce.md) → [AI_PITFALLS.md](AI_PITFALLS.md) → templates/CLAUDE.md
+⚠️ **Start with: [AI_TOOL_QUICK_START.md](AI_TOOL_QUICK_START.md) (80 minutes)**
+- Prompt formula (what to tell AI)
+- Reading list (governor limits, flow blindness, recursion)
+- Checklist (before submitting any code)
+- Templates (CLAUDE.md, test class)
+- Red flags (what to reject)
 
-Then reference: [SECURITY.md](SECURITY.md), [TESTING_STRATEGY.md](TESTING_STRATEGY.md), [reference/soql-anti-patterns.md](reference/soql-anti-patterns.md)
+Then: [ARCHITECT_REVIEW_CONSTRAINTS.md](ARCHITECT_REVIEW_CONSTRAINTS.md) → [REAL_WORLD_AI_FAILURE_AND_FIX.md](REAL_WORLD_AI_FAILURE_AND_FIX.md) → [Vibe Coding Salesforce](vibe-coding-salesforce.md)
+
+Reference: [SECURITY.md](SECURITY.md), [TESTING_STRATEGY.md](TESTING_STRATEGY.md), [AI_PITFALLS.md](AI_PITFALLS.md), [ORDER_OF_EXECUTION.md](ORDER_OF_EXECUTION.md), [reference/soql-anti-patterns.md](reference/soql-anti-patterns.md)
 
 ---
 
