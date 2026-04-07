@@ -1,112 +1,228 @@
 # Security Guardrails
 
-Covering CRUD checks, Field-Level Security (FLS), sharing rules, data masking, and permission model design.
+Security covers CRUD checks, Field-Level Security (FLS), sharing rules, data masking, and permission enforcement across Apex, Flow, and LWC.
+
+## Access Control Flow
+
+All data access follows this sequence:
+
+```mermaid
+flowchart TD
+    A["User Requests Data"] --> B{"Has CRUD<br/>Permission?"}
+    B -->|No| C["Deny Access<br/>Exception"]
+    B -->|Yes| D{"Has FLS<br/>on Field?"}
+    D -->|No| E["Field Stripped<br/>or Exception"]
+    D -->|Yes| F{"Sharing<br/>Rule Allows?"}
+    F -->|No| G["Record Hidden<br/>from Query"]
+    F -->|Yes| H["Return Record<br/>with Visible Fields"]
+    C --> I["Access Denied"]
+    E --> I
+    G --> I
+    H --> J["User Sees Data"]
+```
+
+The order is: CRUD check → FLS check → Sharing check. If any fails, access is denied.
 
 ---
 
 ## Core Rules
 
-### Rule 1: Always Check CRUD
+### Rule 1: CRUD Checks in Apex
 
-Every SOQL query and DML operation must check Create, Read, Update, Delete permissions before executing.
+Every SOQL query and DML operation must check Create, Read, Update, Delete permissions.
 
 ```apex
-// ❌ Wrong
+// ❌ Wrong: No CRUD check
 List<Account> accounts = [SELECT Id, Name FROM Account];
 update accounts;
 
-// ✅ Right with stripInaccessible
-List<Account> accounts = [SELECT Id, Name FROM Account];
-accounts = (List<Account>) Security.stripInaccessible(AccessType.READABLE, accounts);
-update accounts;
-
-// ✅ Right with FLS enforcement in query
+// ✅ Right: WITH SECURITY_ENFORCED (throws exception if denied)
 List<Account> accounts = [SELECT Id, Name FROM Account WITH SECURITY_ENFORCED];
+
+// ✅ Right: Security.stripInaccessible (removes inaccessible fields)
+List<Account> accounts = [SELECT Id, Name FROM Account];
+accounts = (List<Account>) Security.stripInaccessible(AccessType.READABLE, accounts).getResults();
 ```
 
-**Two Approaches**:
+**Two approaches**:
 
-1. **Security.stripInaccessible()**: Removes fields the user can't access. Query succeeds, inaccessible fields are silently removed.
-2. **WITH SECURITY_ENFORCED**: Query throws exception if user lacks access. Safer for security audits.
+| Approach | Behavior | When to Use |
+|----------|----------|-------------|
+| WITH SECURITY_ENFORCED | Throws exception if user lacks access | Required access, audit trail needed |
+| stripInaccessible | Silently removes inaccessible fields | Graceful degradation, showing partial data OK |
 
-**Which to use**:
-- **stripInaccessible**: When you want graceful degradation (show data user can see, hide what they can't)
-- **WITH SECURITY_ENFORCED**: When access is required (throw exception if denied)
+**Which to choose**:
+- Use **WITH SECURITY_ENFORCED** when user MUST have access to proceed
+- Use **stripInaccessible** when you can show user partial data
 
-### Rule 2: Always Enforce FLS on Writes
+### Rule 2: FLS on Writes (Apex)
 
-When updating records, enforce FLS.
+When updating records, enforce FLS to prevent writes to fields user cannot edit.
 
 ```apex
-// ❌ Wrong
+// ❌ Wrong: No FLS check
 account.Name = 'New Name';
-account.CustomField__c = 'Custom Value';
-update account;  // If user lacks FLS on CustomField__c, still updates
+account.Sensitive__c = 'Secret Data';
+update account;  // Update succeeds even if user lacks FLS on Sensitive__c
 
-// ✅ Right
+// ✅ Right: Validate updateable status
 Schema.SObjectField[] fieldsToUpdate = new Schema.SObjectField[]{
   Account.Name,
-  Account.CustomField__c
+  Account.Sensitive__c
 };
 
 for (Schema.SObjectField field : fieldsToUpdate) {
   if (!field.getDescribe().isUpdateable()) {
-    throw new SecurityException('Field ' + field + ' is not updateable');
+    throw new SecurityException('Field ' + field + ' is not updateable for this user');
   }
 }
 
 account.Name = 'New Name';
-account.CustomField__c = 'Custom Value';
+account.Sensitive__c = 'Secret Data';
 update account;
 
-// ✅ Or use stripInaccessible for writes
+// ✅ Alternative: stripInaccessible for writes
 account.Name = 'New Name';
-account.CustomField__c = 'Custom Value';
+account.Sensitive__c = 'Secret Data';
+// Strip fields user can't update
 Map<String, Object> updateMap = (Map<String, Object>) 
-  Security.stripInaccessible(AccessType.UPDATEABLE, account).getResults().get(0);
-update account;  // Fields user can't update are silently skipped
+  Security.stripInaccessible(AccessType.UPDATEABLE, new List<SObject>{account}).getResults().get(0);
+update account;
 ```
 
-### Rule 3: Respect Sharing Rules
+### Rule 3: Sharing Rules (Org-Wide Defaults)
 
-Sharing rules determine what records a user can see. Always respect them.
+Sharing rules determine which records a user can see. Sharing is enforced by default in `with sharing` Apex classes.
 
 ```apex
-// ❌ Wrong
-List<Account> allAccounts = [SELECT Id FROM Account];  // Ignores sharing rules
-
-// ✅ Right
-List<Account> visibleAccounts = [SELECT Id FROM Account];  // Respects sharing rules by default
-
-// ✅ Explicit with sharing clause
+// ✅ Respects sharing rules (default behavior)
 public with sharing class AccountService {
   public static List<Account> getVisibleAccounts() {
-    return [SELECT Id, Name FROM Account];  // Respects user's sharing rules
+    return [SELECT Id, Name FROM Account];
+    // Returns only accounts user has access to via sharing rules
   }
 }
 
-// ❌ Bypass sharing (only when necessary)
+// ❌ Bypasses sharing rules (dangerous, use sparingly)
 public without sharing class AdminAccountService {
   public static List<Account> getAllAccounts() {
-    return [SELECT Id, Name FROM Account];  // Ignores sharing rules (dangerous)
+    return [SELECT Id, Name FROM Account];
+    // Returns all accounts, ignoring sharing (admin only)
   }
 }
 ```
 
-**Best Practice**: All Apex classes use `with sharing` by default. Only use `without sharing` for specific admin functions, and document why.
+**Best practice**: All Apex classes use `with sharing` by default. Only use `without sharing` for specific admin operations, and document why.
+
+---
+
+## CRUD/FLS/Sharing by Component
+
+### Apex: CRUD + FLS + Sharing All Required
+
+```apex
+public with sharing class AccountService {
+  // Test with FeatureManagement.checkPermission or stripInaccessible
+  public static List<Account> getAccounts() {
+    // Enforces sharing automatically (with sharing class)
+    // Enforces CRUD via WITH SECURITY_ENFORCED
+    List<Account> accounts = [SELECT Id, Name, Phone FROM Account WITH SECURITY_ENFORCED];
+    
+    // Enforce FLS on reads
+    accounts = (List<Account>) Security.stripInaccessible(AccessType.READABLE, accounts).getResults();
+    
+    return accounts;
+  }
+  
+  public static void updateAccount(Id accountId, String newName) {
+    Account acc = [SELECT Id, Name FROM Account WHERE Id = :accountId WITH SECURITY_ENFORCED];
+    
+    // Enforce FLS on writes
+    if (!Account.Name.getDescribe().isUpdateable()) {
+      throw new SecurityException('Name field is not updateable');
+    }
+    
+    acc.Name = newName;
+    update acc;
+  }
+}
+```
+
+### Flow: FLS + Sharing (No Direct CRUD Check)
+
+Flows enforce FLS automatically. Sharing is enforced if the flow runs as the logged-in user.
+
+**FLS enforcement in Flow**:
+- Record-Triggered Flows: Automatically respect FLS on fields accessed
+- Screen Flows: Automatically respect FLS on fields shown to user
+- Subflows: FLS inherited from parent context
+
+**Sharing enforcement in Flow**:
+- Record-Triggered Flows: Run as system (can see all records)
+- Screen Flows: Run as logged-in user (sharing rules apply)
+- Scheduled Flows: Run as system (can see all records)
+
+**Best practice**: If Flow needs to enforce user sharing, use Apex service with `with sharing` and invoke from Flow.
+
+```xml
+<!-- Flow: Create Account (respects FLS) -->
+<flow:definition>
+  <recordCreate>
+    <label>Create Account</label>
+    <inputAssignments>
+      <assignToReference>{!newAccount.Name}</assignToReference>
+      <value>{!inputName}</value>
+    </inputAssignments>
+    <!-- FLS is automatically enforced -->
+    <!-- If user lacks permission to create Account, flow fails -->
+  </recordCreate>
+</flow:definition>
+```
+
+### LWC: FLS + Sharing via Apex Controller
+
+LWC cannot directly enforce CRUD/FLS/Sharing. All data access must go through Apex.
+
+```javascript
+// ❌ Wrong: Direct data access (no FLS/CRUD/Sharing)
+// LWC cannot fetch directly from Salesforce data
+
+// ✅ Right: Apex controller with proper security
+import { LightningElement, wire } from 'lwc';
+import getAccounts from '@salesforce/apex/AccountController.getAccounts';
+
+export default class AccountList extends LightningElement {
+  @wire(getAccounts)
+  wiredAccounts;
+}
+```
+
+```apex
+// Apex Controller: enforces all security
+public with sharing class AccountController {
+  @AuraEnabled(cacheable=true)
+  public static List<Account> getAccounts() {
+    // with sharing: enforces sharing rules
+    // WITH SECURITY_ENFORCED: enforces CRUD
+    // stripInaccessible: enforces FLS
+    List<Account> accounts = [SELECT Id, Name, Phone FROM Account WITH SECURITY_ENFORCED];
+    return (List<Account>) Security.stripInaccessible(AccessType.READABLE, accounts).getResults();
+  }
+}
+```
 
 ---
 
 ## Field-Level Security (FLS) Testing
 
-### Test Data Setup with Proper Permissions
+### Test Setup with PermissionSet
 
 ```apex
 @IsTest
 private class AccountServiceTest {
   @TestSetup
   static void setupTestData() {
-    // Create test user with standard permissions only
+    // Create test user with standard permissions
     User testUser = new User(
       FirstName = 'Test',
       LastName = 'User',
@@ -121,7 +237,7 @@ private class AccountServiceTest {
     );
     insert testUser;
     
-    // Assign feature permission set (custom field visibility)
+    // Assign permission set with custom field access
     PermissionSetAssignment psa = new PermissionSetAssignment(
       PermissionSetId = [SELECT Id FROM PermissionSet WHERE Name = 'Account_Admin'].Id,
       AssigneeId = testUser.Id
@@ -130,52 +246,45 @@ private class AccountServiceTest {
   }
   
   @IsTest
-  static void testUpdateAccountWithFLS() {
+  static void testFLSEnforcement() {
     User testUser = [SELECT Id FROM User WHERE Email = 'testuser@example.com' LIMIT 1];
-    
     Account acc = [SELECT Id FROM Account LIMIT 1];
     
     System.runAs(testUser) {
       acc.Name = 'Updated Name';
-      acc.CustomField__c = 'Custom Value';
+      acc.Sensitive__c = 'Secret Data';
       
-      // If testUser lacks FLS on CustomField__c, exception thrown
       try {
         update acc;
         System.assert(true, 'Update succeeded (user has FLS)');
       } catch (DmlException ex) {
-        System.assert(ex.getMessage().contains('INSUFFICIENT_ACCESS_ON_CROSS_REFERENCE_ENTITY'),
-                     'Expected FLS error');
+        System.assert(ex.getMessage().contains('INSUFFICIENT_ACCESS'),
+                     'Expected FLS violation');
       }
     }
   }
-}
-```
-
-### Testing with stripInaccessible
-
-```apex
-@IsTest
-static void testStripInaccessibleFields() {
-  User testUser = [SELECT Id FROM User WHERE Email = 'testuser@example.com' LIMIT 1];
   
-  Account acc = new Account(
-    Name = 'Test Account',
-    CustomField__c = 'Should be hidden',
-    Phone = '555-1234'
-  );
-  insert acc;
-  
-  System.runAs(testUser) {
-    List<Account> accounts = [SELECT Id, Name, CustomField__c, Phone FROM Account WHERE Id = :acc.Id];
+  @IsTest
+  static void testStripInaccessible() {
+    User testUser = [SELECT Id FROM User WHERE Email = 'testuser@example.com' LIMIT 1];
     
-    // Strip fields user can't read
-    accounts = (List<Account>) Security.stripInaccessible(AccessType.READABLE, accounts).getResults();
+    Account acc = new Account(
+      Name = 'Test Account',
+      Sensitive__c = 'Should be hidden',
+      Phone = '555-1234'
+    );
+    insert acc;
     
-    // CustomField__c is now null if user lacks FLS
-    Account result = accounts[0];
-    System.assert(result.CustomField__c == null || result.CustomField__c.length() > 0);
-    System.assert(result.Name == 'Test Account');  // Name is always readable
+    System.runAs(testUser) {
+      List<Account> accounts = [SELECT Id, Name, Sensitive__c, Phone FROM Account WHERE Id = :acc.Id];
+      
+      // Strip fields user can't read
+      accounts = (List<Account>) Security.stripInaccessible(AccessType.READABLE, accounts).getResults();
+      
+      Account result = accounts[0];
+      // Sensitive__c is null if user lacks FLS
+      System.assert(result.Name == 'Test Account');
+    }
   }
 }
 ```
@@ -186,20 +295,27 @@ static void testStripInaccessibleFields() {
 
 ### Org-Wide Defaults (OWD)
 
-OWD determines the baseline sharing level:
+OWD sets the baseline sharing level for all records:
 
-| OWD Setting | What It Means |
-|---|---|
-| **Public Read/Write** | Everyone can see and edit (least restrictive) |
-| **Public Read Only** | Everyone can see, only owner can edit |
-| **Private** | Only owner can see (most restrictive) |
-| **Controlled by Parent** | Child records inherit parent's sharing |
+| Setting | Permission | Effect |
+|---------|-----------|--------|
+| Public Read/Write | Everyone can see and edit | Least restrictive |
+| Public Read Only | Everyone can see, owner can edit | Limited write access |
+| Private | Only owner can see | Most restrictive |
+| Controlled by Parent | Inherits from parent record | For child objects |
 
-### Sharing Rule Example
+### Manual Sharing with AccountShare
 
 ```apex
-// Create a sharing rule: Sales team can read all Accounts
-public class AccountSharingService {
+public with sharing class AccountSharingService {
+  public static void shareAccountWithUser(Id accountId, Id userId, String accessLevel) {
+    AccountShare share = new AccountShare();
+    share.AccountId = accountId;
+    share.UserOrGroupId = userId;
+    share.AccountAccessLevel = accessLevel;  // Read, Edit, or All
+    insert share;
+  }
+  
   public static void shareAccountWithTeam(Id accountId, List<Id> userIds) {
     List<AccountShare> shares = new List<AccountShare>();
     
@@ -207,33 +323,34 @@ public class AccountSharingService {
       AccountShare share = new AccountShare();
       share.AccountId = accountId;
       share.UserOrGroupId = userId;
-      share.AccountAccessLevel = 'Read';  // Read, Edit, or All
+      share.AccountAccessLevel = 'Read';
       shares.add(share);
     }
     
     insert shares;
   }
 }
-
-// Usage
-AccountSharingService.shareAccountWithTeam(accountId, new List<Id>{user1Id, user2Id});
 ```
 
 ### Testing Sharing Rules
 
 ```apex
 @IsTest
-static void testSharingRules() {
-  User owner = createUser('Owner');
-  User viewer = createUser('Viewer');
+static void testAccountSharing() {
+  User owner = createTestUser('Owner');
+  User viewer = createTestUser('Viewer');
   
+  Id accountId;
   System.runAs(owner) {
     Account acc = new Account(Name = 'Private Account');
     insert acc;
+    accountId = acc.Id;
     
-    // Viewer shouldn't see account yet
-    List<Account> visibleToViewer = [SELECT Id FROM Account WHERE Id = :acc.Id];
-    System.assertEquals(0, visibleToViewer.size(), 'Viewer should not see account');
+    // Viewer cannot see account yet (OWD is Private)
+    System.runAs(viewer) {
+      List<Account> visibleAccounts = [SELECT Id FROM Account WHERE Id = :accountId];
+      System.assertEquals(0, visibleAccounts.size(), 'Viewer should not see account');
+    }
   }
   
   // Owner shares account with viewer
@@ -254,20 +371,224 @@ static void testSharingRules() {
 
 ---
 
-## Data Masking & PII Protection
+## Hardcoded IDs: The Silent Killer
 
-### Pattern 1: Masking Sensitive Fields in Queries
+Never hardcode Record Type IDs, custom metadata type IDs, or other org-specific values. Resolve dynamically.
+
+### Apex: Hardcoded Record Type ID
 
 ```apex
-public class AccountService {
-  public static List<Account> getAccountsWithMasking() {
-    List<Account> accounts = [SELECT Id, Name, Phone FROM Account];
+// ❌ Wrong: Hardcoded ID breaks in other orgs
+public void createAccount() {
+  Account acc = new Account(
+    Name = 'Acme',
+    RecordTypeId = '012a0000000IZ3AAM'  // This ID is specific to one org
+  );
+  insert acc;
+}
+
+// ✅ Right: Resolve Record Type dynamically
+public void createAccount() {
+  Map<String, RecordTypeInfo> rtByName = Schema.SObjectType.Account.getRecordTypeInfosByDeveloperName();
+  
+  if (!rtByName.containsKey('Standard_Account')) {
+    throw new ConfigException('Record Type Standard_Account not found');
+  }
+  
+  Id recordTypeId = rtByName.get('Standard_Account').getRecordTypeId();
+  
+  Account acc = new Account(
+    Name = 'Acme',
+    RecordTypeId = recordTypeId
+  );
+  insert acc;
+}
+```
+
+### Flow: Hardcoded Record Type ID
+
+```xml
+<!-- ❌ Wrong: Hardcoded Record Type ID -->
+<recordCreate>
+  <recordTypeId>012a0000000IZ3AAM</recordTypeId>
+  <!-- This ID doesn't exist in other orgs -->
+</recordCreate>
+
+<!-- ✅ Right: Use Record Type Name (declarative, no ID needed) -->
+<recordCreate>
+  <recordTypeDisplayName>Standard Account</recordTypeDisplayName>
+</recordCreate>
+```
+
+### LWC: Hardcoded Metadata Reference
+
+```javascript
+// ❌ Wrong: Hardcoded values
+const ACCOUNT_RECORD_TYPE = '012a0000000IZ3AAM';
+const CUSTOM_SETTING_ID = '001a0000000XYZ';
+
+// ✅ Right: Call Apex to get dynamic values
+import getRecordTypeId from '@salesforce/apex/AccountController.getRecordTypeId';
+
+export default class AccountForm extends LightningElement {
+  recordTypeId;
+  
+  async connectedCallback() {
+    this.recordTypeId = await getRecordTypeId('Standard_Account');
+  }
+}
+```
+
+```apex
+public class AccountController {
+  @AuraEnabled(cacheable=true)
+  public static String getRecordTypeId(String recordTypeName) {
+    Map<String, RecordTypeInfo> rtByName = Schema.SObjectType.Account.getRecordTypeInfosByDeveloperName();
     
-    // Mask phone numbers
+    if (!rtByName.containsKey(recordTypeName)) {
+      throw new ConfigException('Record Type ' + recordTypeName + ' not found');
+    }
+    
+    return rtByName.get(recordTypeName).getRecordTypeId();
+  }
+}
+```
+
+---
+
+## SQL Injection Prevention
+
+Salesforce SOQL is safe from injection when using bind variables. Never concatenate user input into SOQL.
+
+```apex
+// ❌ Wrong: Vulnerable to SOQL injection
+String searchName = 'Test\' OR Name != NULL; --';
+String query = 'SELECT Id FROM Account WHERE Name = \'' + searchName + '\'';
+List<Account> accounts = Database.query(query);  // SOQL injection!
+
+// ✅ Right: Use bind variables (safe)
+String searchName = 'Test';
+List<Account> accounts = [SELECT Id FROM Account WHERE Name = :searchName];
+```
+
+**Rule**: Always use bind variables (`:variable`) in SOQL. Never concatenate user input.
+
+---
+
+## XSS Prevention in LWC
+
+### Template Binding (Safe)
+
+```html
+<!-- ✅ Safe: Template binding automatically escapes HTML -->
+<template>
+  <div class="user-name">{userName}</div>
+  <!-- If userName = '<script>alert(1)</script>', it renders as text, not executed -->
+</template>
+```
+
+### innerHTML (Unsafe)
+
+```javascript
+// ❌ Wrong: innerHTML executes scripts
+const div = this.template.querySelector('.content');
+div.innerHTML = userProvidedContent;  // If content has <script>, it runs
+
+// ✅ Right: textContent doesn't execute scripts
+div.textContent = userProvidedContent;  // Renders as plain text
+```
+
+### Sanitizing User Input
+
+```javascript
+import { sanitizeUrl } from 'c/sanitizer';
+
+export default class UserContent extends LightningElement {
+  userUrl;
+  
+  connectedCallback() {
+    // Sanitize URL to prevent javascript: protocol
+    this.userUrl = sanitizeUrl(this.unsafeUrl);
+  }
+}
+```
+
+```html
+<!-- Template binding is safe -->
+<a href={userUrl}>{userUrl}</a>
+```
+
+---
+
+## Custom Permissions
+
+Use custom permissions to restrict access to sensitive operations.
+
+### Setup
+
+1. Setup > Custom Code > Custom Permissions
+2. New > Label: `Can_Export_Data`, Name: `Can_Export_Data`
+3. Add to PermissionSet assigned to users
+
+### In Apex
+
+```apex
+public with sharing class DataExportService {
+  public static String exportAccountsToCSV() {
+    if (!FeatureManagement.checkPermission('Can_Export_Data')) {
+      throw new SecurityException('You lack permission to export data');
+    }
+    
+    List<Account> accounts = [SELECT Id, Name, Phone FROM Account WITH SECURITY_ENFORCED];
+    
+    String csv = 'Id,Name,Phone\n';
     for (Account acc : accounts) {
+      csv += acc.Id + ',' + acc.Name + ',' + (acc.Phone ?? '') + '\n';
+    }
+    
+    return csv;
+  }
+}
+```
+
+### In LWC
+
+```javascript
+import checkPermission from '@salesforce/apex/PermissionService.checkPermission';
+
+export default class DataExport extends LightningElement {
+  async handleExport() {
+    const hasPermission = await checkPermission('Can_Export_Data');
+    
+    if (!hasPermission) {
+      this.showError('You lack permission to export data');
+      return;
+    }
+    
+    // Proceed with export
+  }
+}
+```
+
+---
+
+## Data Masking & PII Protection
+
+### Masking Sensitive Fields
+
+```apex
+public with sharing class AccountService {
+  public static List<Account> getAccountsWithMasking() {
+    List<Account> accounts = [SELECT Id, Name, Phone, SSN__c FROM Account];
+    
+    for (Account acc : accounts) {
+      // Mask phone (keep last 4 digits)
       if (acc.Phone != null && acc.Phone.length() > 4) {
         acc.Phone = '***-' + acc.Phone.substring(acc.Phone.length() - 4);
       }
+      
+      // Don't expose SSN in response
+      acc.SSN__c = null;
     }
     
     return accounts;
@@ -275,29 +596,30 @@ public class AccountService {
 }
 ```
 
-### Pattern 2: PII in Logs
+### No PII in Logs
 
 ```apex
-private static void logError(Exception ex, String accountId) {
+private static void logError(Exception ex, Id accountId) {
   ErrorLog__c log = new ErrorLog__c();
   log.Message__c = ex.getMessage();
   log.Account_Id__c = accountId;  // Log ID, not sensitive data
   
-  // ❌ Don't do this
-  // log.Email__c = account.Email;  // Never log email addresses
+  // ❌ Never log sensitive data
+  // log.Email__c = account.Email;
+  // log.SSN__c = account.SSN__c;
   
   insert log;
 }
 ```
 
-### Pattern 3: Restricting Access to Sensitive Fields
+### Restricting Sensitive Field Access
 
 ```apex
 public with sharing class SensitiveDataService {
   public static Map<Id, Account> getAccountsWithSSN() {
-    // Check if user has permission to view SSNs
-    if (!FeatureManagement.checkPermission('View_SSN')) {
-      throw new SecurityException('You do not have permission to view SSNs');
+    // Check custom permission before exposing PII
+    if (!FeatureManagement.checkPermission('View_PII')) {
+      throw new SecurityException('You lack permission to view PII');
     }
     
     return new Map<Id, Account>([SELECT Id, Name, SSN__c FROM Account]);
@@ -307,137 +629,17 @@ public with sharing class SensitiveDataService {
 
 ---
 
-## Custom Permissions
+## Production Security Checklist
 
-Use custom permissions to restrict access to sensitive operations.
-
-### Setup Steps
-
-1. Setup > Custom Code > Custom Permissions
-2. Click New
-3. **Label**: `Can_Export_Data`
-4. **Name**: `Can_Export_Data`
-5. Add to Permission Sets that should have this permission
-
-### In Apex Code
-
-```apex
-public with sharing class DataExportService {
-  public static String exportAccountsToCSV() {
-    // Check permission
-    if (!FeatureManagement.checkPermission('Can_Export_Data')) {
-      throw new SecurityException('You do not have permission to export data');
-    }
-    
-    List<Account> accounts = [SELECT Id, Name, Phone FROM Account];
-    
-    // Generate CSV
-    String csv = 'Id,Name,Phone\n';
-    for (Account acc : accounts) {
-      csv += acc.Id + ',' + acc.Name + ',' + acc.Phone + '\n';
-    }
-    
-    return csv;
-  }
-}
-```
-
----
-
-## Hardcoded IDs: The Silent Killer
-
-Never hardcode Record Type IDs, custom setting IDs, or picklist values. Always resolve dynamically.
-
-### ❌ Wrong (hardcoded)
-
-```apex
-public void createAccount() {
-  Account acc = new Account(
-    Name = 'Acme',
-    RecordTypeId = '012a0000000IZ3AAM'  // Hardcoded! Breaks in other orgs
-  );
-  insert acc;
-}
-```
-
-### ✅ Right (dynamic)
-
-```apex
-public void createAccount() {
-  Id accountRecordTypeId = Schema.SObjectType.Account.getRecordTypeInfosByDeveloperName()
-    .get('Standard_Account')
-    .getRecordTypeId();
-  
-  Account acc = new Account(
-    Name = 'Acme',
-    RecordTypeId = accountRecordTypeId
-  );
-  insert acc;
-}
-```
-
-### ✅ Right (with error handling)
-
-```apex
-public void createAccount() {
-  Map<String, RecordTypeInfo> rtByName = Schema.SObjectType.Account.getRecordTypeInfosByDeveloperName();
-  
-  if (!rtByName.containsKey('Standard_Account')) {
-    throw new ConfigException('Record Type Standard_Account not found');
-  }
-  
-  Id accountRecordTypeId = rtByName.get('Standard_Account').getRecordTypeId();
-  
-  Account acc = new Account(
-    Name = 'Acme',
-    RecordTypeId = accountRecordTypeId
-  );
-  insert acc;
-}
-```
-
----
-
-## SQL Injection Prevention
-
-Salesforce SOQL is injection-safe by default when using bind variables. Never concatenate strings into SOQL.
-
-### ❌ Wrong (vulnerable)
-
-```apex
-String searchName = 'Test\' OR Name != NULL; --';
-String query = 'SELECT Id FROM Account WHERE Name = \'' + searchName + '\'';
-List<Account> accounts = Database.query(query);  // SOQL injection!
-```
-
-### ✅ Right (safe)
-
-```apex
-String searchName = 'Test';
-List<Account> accounts = [SELECT Id FROM Account WHERE Name = :searchName];  // Safe
-```
-
-**Best Practice**: Always use bind variables (`:variable`) in SOQL. Never concatenate user input into query strings.
-
----
-
-## XSS Prevention in LWC
-
-See LWC_BEST_PRACTICES.md for XSS prevention patterns.
-
----
-
-## Checklist: Security Review
-
-- ✅ All SOQL/DML have CRUD checks (stripInaccessible or WITH SECURITY_ENFORCED)
-- ✅ All classes use `with sharing` (document exceptions)
-- ✅ FLS enforced on writes
-- ✅ No hardcoded IDs (Record Types, Picklists resolved dynamically)
+- ✅ All SOQL/DML have CRUD checks (WITH SECURITY_ENFORCED or stripInaccessible)
+- ✅ All Apex classes use `with sharing` (document exceptions for `without sharing`)
+- ✅ FLS enforced on writes (verify isUpdateable before update)
+- ✅ No hardcoded IDs (Record Types, Custom Metadata resolved dynamically)
 - ✅ No string concatenation in SOQL (use bind variables)
-- ✅ Sensitive fields masked or restricted
-- ✅ Custom permissions for sensitive operations
-- ✅ No PII in logs
-- ✅ Error messages don't expose system details
-- ✅ All endpoints validate input
-- ✅ Test with permission sets (not System Admin)
-
+- ✅ No direct LWC data access (all through Apex controller with security)
+- ✅ Sensitive fields masked or restricted (custom permissions)
+- ✅ No PII in logs or error messages
+- ✅ XSS prevention in LWC (textContent instead of innerHTML)
+- ✅ Tests run as non-admin user with PermissionSet
+- ✅ Sharing rules tested (System.runAs with different users)
+- ✅ Flow respects FLS (automatic, but verify in test)

@@ -1,40 +1,138 @@
 # Testing Strategy
 
-Comprehensive guide to testing Apex, LWC, and Flows. Covers unit vs. integration testing, bulk testing, edge cases, and achieving 90%+ coverage.
+Testing covers unit, integration, and bulk testing for Apex, Flow, and LWC. Minimum 90%+ coverage across all components.
+
+## Test Pyramid
+
+```mermaid
+flowchart TD
+    A["Test Distribution"] --> B["Unit Tests"]
+    A --> C["Integration Tests"]
+    A --> D["End-to-End Tests"]
+    
+    B --> B1["Fast<br/>Isolated<br/>Mocked Dependencies<br/>70% of total"]
+    C --> C1["Medium Speed<br/>Real Database<br/>Tests Interactions<br/>20% of total"]
+    D --> D1["Slow<br/>Full Flow<br/>Manual Verification<br/>10% of total"]
+```
+
+**Distribution**:
+- **70% Unit Tests**: Test individual methods with mocked dependencies
+- **20% Integration Tests**: Test trigger + flow + Apex together
+- **10% End-to-End Tests**: Full workflows tested manually or in staging
+
+## When to Use Unit vs. Integration vs. Bulk
+
+```mermaid
+flowchart TD
+    A["New Test Needed"] --> B{"Testing what?"}
+    B -->|Single Method<br/>in Isolation| C["Unit Test"]
+    B -->|Trigger + Flow<br/>+ Apex Together| D["Integration Test"]
+    B -->|200+ Records<br/>at Scale| E["Bulk Test"]
+    C --> C1["Mock dependencies<br/>Test happy path + error"]
+    D --> D1["Real database<br/>Test side effects"]
+    E --> E1["Measure SOQL/DML<br/>Verify performance"]
+```
 
 ---
 
-## Why 90%+ Coverage Matters
+## 90%+ Coverage Requirement
 
-Code coverage percentage is misleading. A class with 95% coverage can still have critical bugs if the untested 5% is error handling.
+Coverage percentage is misleading. A class with 95% coverage can still have critical bugs if the untested 5% is error handling or edge cases.
 
-**Real Coverage = Code Lines Tested + Edge Cases + Error Paths**
+**Real Coverage = All Code Lines + All Branches (if/else/catch) + Edge Cases**
+
+### What NOT Covered by 95% Line Coverage
 
 ```apex
 public class AccountService {
-  public static void updateAccounts(List<Account> accounts) {
-    update accounts;  // 1 line, 100% coverage if we just insert and update
+  public static Decimal calculateRevenue(List<Account> accounts) {
+    if (accounts == null || accounts.isEmpty()) {
+      return 0;  // Edge case: null/empty list
+    }
+    
+    Decimal total = 0;
+    for (Account acc : accounts) {
+      if (acc.Revenue__c != null) {  // Edge case: null field
+        total += acc.Revenue__c;
+      }
+    }
+    
+    try {
+      update accounts;
+    } catch (DmlException ex) {  // Error path: needs test
+      System.debug('Update failed: ' + ex.getMessage());
+      throw ex;
+    }
+    
+    return total;
   }
 }
 ```
 
-If we only test the happy path, we cover 100% but don't test:
-- Empty lists
-- Null values
-- Duplicate records
-- Records without required fields
-- DML errors
-- Permission issues
+**Happy path only test** (covers 95% of lines, misses critical cases):
+```apex
+@IsTest
+static void testCalculateRevenue() {
+  List<Account> accounts = new List<Account>{
+    new Account(Name = 'Acme', Revenue__c = 100000)
+  };
+  insert accounts;
+  
+  Decimal result = AccountService.calculateRevenue(accounts);
+  System.assertEquals(100000, result);
+}
+```
 
-**Minimum 90% coverage means**: All code paths tested (if/else, catch blocks, loops) AND edge cases.
+**Full coverage test** (covers 100% of code paths):
+```apex
+@IsTest
+static void testCalculateRevenueWithNullAccounts() {
+  Decimal result = AccountService.calculateRevenue(null);
+  System.assertEquals(0, result);
+}
+
+@IsTest
+static void testCalculateRevenueWithEmptyList() {
+  Decimal result = AccountService.calculateRevenue(new List<Account>{});
+  System.assertEquals(0, result);
+}
+
+@IsTest
+static void testCalculateRevenueWithNullField() {
+  List<Account> accounts = new List<Account>{
+    new Account(Name = 'Acme', Revenue__c = null)
+  };
+  insert accounts;
+  
+  Decimal result = AccountService.calculateRevenue(accounts);
+  System.assertEquals(0, result);
+}
+
+@IsTest
+static void testCalculateRevenueUpdateFailure() {
+  List<Account> accounts = new List<Account>{
+    new Account(Name = 'Acme', Revenue__c = 100000)
+  };
+  insert accounts;
+  
+  try {
+    // Force update to fail by removing Name
+    for (Account acc : accounts) {
+      acc.Name = null;
+    }
+    AccountService.calculateRevenue(accounts);
+    System.assert(false, 'Should fail with DML exception');
+  } catch (DmlException ex) {
+    System.assert(ex.getMessage().contains('Required'));
+  }
+}
+```
 
 ---
 
-## Unit vs. Integration Testing
+## Apex Unit Testing
 
-### Unit Testing
-
-Tests a single method in isolation. Dependencies are mocked.
+### Basic Pattern: Arrange-Act-Assert
 
 ```apex
 @IsTest
@@ -42,118 +140,97 @@ private class AccountServiceTest {
   @IsTest
   static void testCalculateAnnualRevenue() {
     // Arrange: Create test data
-    Account acc = new Account(Name = 'Acme', Revenue__c = 100000);
+    Account acc = new Account(
+      Name = 'Acme',
+      Revenue__c = 100000
+    );
     
     // Act: Call method
     Decimal revenue = AccountService.calculateAnnualRevenue(acc);
     
     // Assert: Verify result
-    System.assertEquals(100000, revenue, 'Revenue should match');
+    System.assertEquals(100000, revenue, 'Revenue should match input');
   }
 }
 ```
 
-**Pros**: Fast, isolated, easy to debug.
-
-**Cons**: May miss integration issues (database, triggers, flows).
-
-### Integration Testing
-
-Tests multiple components working together. Uses real database.
-
-```apex
-@IsTest
-private class AccountIntegrationTest {
-  @IsTest
-  static void testCreateAccountTriggersFlow() {
-    // Create account (triggers before-insert)
-    Account acc = new Account(Name = 'Acme');
-    insert acc;  // Triggers after-insert flow
-    
-    // Verify related records created by trigger/flow
-    List<Task> tasks = [SELECT Id FROM Task WHERE WhoId = :acc.OwnerId];
-    System.assert(!tasks.isEmpty(), 'Flow should create task');
-  }
-}
-```
-
-**Pros**: Tests real behavior, catches integration bugs.
-
-**Cons**: Slower, harder to debug, depends on org setup.
-
----
-
-## Test Data Patterns
-
-### Pattern 1: TestSetup Method
+### TestSetup vs. Inline Data
 
 ```apex
 @IsTest
 private class AccountServiceTest {
   @TestSetup
   static void setupTestData() {
-    // Data created once per class, shared across all test methods
-    Account acc = new Account(Name = 'Shared Account');
-    insert acc;
+    // Data created once, shared across all test methods
+    List<Account> accounts = new List<Account>();
+    for (Integer i = 0; i < 10; i++) {
+      accounts.add(new Account(Name = 'Account ' + i));
+    }
+    insert accounts;
   }
   
   @IsTest
-  static void testUpdateAccount() {
+  static void testQueryAccounts() {
     Account acc = [SELECT Id FROM Account LIMIT 1];
-    acc.Name = 'Updated';
-    update acc;
+    System.assertNotEquals(null, acc.Id);
+  }
+  
+  @IsTest
+  static void testUpdateAccounts() {
+    List<Account> accounts = [SELECT Id FROM Account];
     
-    System.assertEquals('Updated', [SELECT Name FROM Account WHERE Id = :acc.Id].Name);
-  }
-}
-```
-
-**Use TestSetup when**: Multiple test methods use the same data.
-
-### Pattern 2: Test Data Factory
-
-```apex
-@IsTest
-public class TestDataFactory {
-  public static Account createAccount(String name) {
-    return new Account(Name = name);
-  }
-  
-  public static List<Account> createAccounts(Integer count) {
-    List<Account> accounts = new List<Account>();
-    for (Integer i = 0; i < count; i++) {
-      accounts.add(new Account(Name = 'Account ' + i));
+    for (Account acc : accounts) {
+      acc.Revenue__c = 50000;
     }
-    return accounts;
+    update accounts;
+    
+    System.assertEquals(10, [SELECT COUNT() FROM Account WHERE Revenue__c = 50000]);
   }
-}
-
-// Usage
-@IsTest
-static void testBulkUpdate() {
-  List<Account> accounts = TestDataFactory.createAccounts(200);
-  insert accounts;
-  
-  // Update all
-  for (Account acc : accounts) {
-    acc.Revenue__c = 50000;
-  }
-  update accounts;
-  
-  System.assertEquals(200, [SELECT COUNT() FROM Account WHERE Revenue__c = 50000]);
 }
 ```
 
-**Use Factory when**: Creating multiple variations of test data.
-
-### Pattern 3: System.runAs for Permission Testing
+### Testing Error Paths
 
 ```apex
 @IsTest
-private class AccountServiceSecurityTest {
+static void testUpdateWithoutPermission() {
+  User testUser = createTestUser('Standard User');
+  Account acc = new Account(Name = 'Acme');
+  insert acc;
+  
+  // Run as non-admin user
+  System.runAs(testUser) {
+    acc.Name = 'Updated';
+    
+    try {
+      update acc;
+      System.assert(false, 'Should fail due to FLS');
+    } catch (DmlException ex) {
+      System.assert(ex.getMessage().contains('INSUFFICIENT_ACCESS'));
+    }
+  }
+}
+
+@IsTest
+static void testNullValueHandling() {
+  try {
+    AccountService.calculateRevenue(null);
+    System.assert(false, 'Should throw exception for null input');
+  } catch (NullPointerException ex) {
+    System.assert(true);
+  }
+}
+```
+
+### Permission Testing with System.runAs
+
+Permission-enforcing services (those using `with sharing` or `Security.stripInaccessible()`) must be tested as non-admin users:
+
+```apex
+@IsTest
+private class SensitiveDataServiceTest {
   @TestSetup
   static void setupUsers() {
-    // Create test user with limited permissions
     User testUser = new User(
       FirstName = 'Test',
       LastName = 'User',
@@ -167,23 +244,23 @@ private class AccountServiceSecurityTest {
       LanguageLocaleKey = 'en_US'
     );
     insert testUser;
+    
+    // Assign permission set
+    PermissionSetAssignment psa = new PermissionSetAssignment(
+      PermissionSetId = [SELECT Id FROM PermissionSet WHERE Name = 'Data_Admin'].Id,
+      AssigneeId = testUser.Id
+    );
+    insert psa;
   }
   
   @IsTest
-  static void testUpdateWithoutPermission() {
+  static void testAccessWithPermissionSet() {
     User testUser = [SELECT Id FROM User WHERE Email = 'testuser@example.com' LIMIT 1];
-    Account acc = [SELECT Id FROM Account LIMIT 1];
     
-    // Run as limited user
     System.runAs(testUser) {
-      acc.Name = 'Updated';
-      
-      try {
-        update acc;
-        System.assert(false, 'Should fail due to permissions');
-      } catch (DmlException ex) {
-        System.assert(ex.getMessage().contains('INSUFFICIENT_ACCESS'));
-      }
+      // Call service that checks FLS/CRUD
+      List<Account> accounts = SensitiveDataService.getAccounts();
+      System.assertNotEquals(null, accounts);
     }
   }
 }
@@ -191,9 +268,9 @@ private class AccountServiceSecurityTest {
 
 ---
 
-## Bulk Testing (200+ Records)
+## Apex Bulk Testing (200+ Records)
 
-Bulk tests ensure code works at scale.
+Bulk tests ensure code handles at scale without hitting governor limits.
 
 ```apex
 @IsTest
@@ -207,133 +284,134 @@ private class AccountServiceBulkTest {
     }
     insert accounts;
     
-    // Update all (triggers should handle bulk)
+    Test.startTest();
+    
+    // Update all (should be bulkified)
     for (Account acc : accounts) {
       acc.Revenue__c = 50000;
     }
     update accounts;
     
+    Test.stopTest();
+    
     // Verify all updated
     Integer count = [SELECT COUNT() FROM Account WHERE Revenue__c = 50000];
     System.assertEquals(200, count, 'All 200 accounts should update');
     
-    // Verify no SOQL or DML limits hit
-    System.assert(Limits.getQueries() < 100, 'Too many SOQL queries');
+    // Verify governor limits respected
+    System.assert(Limits.getQueries() < 50, 'Too many SOQL queries: ' + Limits.getQueries());
     System.assert(Limits.getDmlRows() <= 200, 'Too much DML');
+  }
+  
+  @IsTest
+  static void testBulkInsertWithTrigger() {
+    List<Account> accounts = new List<Account>();
+    for (Integer i = 0; i < 200; i++) {
+      accounts.add(new Account(Name = 'Account ' + i));
+    }
+    
+    Test.startTest();
+    insert accounts;
+    Test.stopTest();
+    
+    // Verify trigger fired for all 200 records
+    List<Task> tasks = [SELECT COUNT() FROM Task];
+    System.assertEquals(200, tasks.size(), 'Trigger should create 200 tasks');
+    
+    // Verify no limit violations
+    System.assert(Limits.getQueries() < 100);
   }
 }
 ```
 
-**Why bulk testing?**
-- Developers test with 50 records. Production has 50,000.
-- Code that works for 50 may fail at 200+ due to SOQL/DML limits.
-- Bulk tests catch these issues before production.
-
 ---
 
-## Testing Async Code
+## Apex Integration Testing
 
-### Testing Queueable Jobs
+Integration tests verify triggers, flows, and Apex work together:
 
 ```apex
 @IsTest
-private class UpdateExternalSystemQueueableTest {
+private class AccountIntegrationTest {
   @IsTest
-  static void testQueueableExecution() {
-    Account acc = new Account(Name = 'Test Acme');
+  static void testCreateAccountTriggersFlow() {
+    Account acc = new Account(Name = 'Acme');
+    
+    Test.startTest();
+    insert acc;  // Triggers after-insert flow
+    Test.stopTest();
+    
+    // Verify flow created related records
+    List<Task> tasks = [SELECT Id FROM Task WHERE WhoId = :acc.OwnerId];
+    System.assert(!tasks.isEmpty(), 'Flow should create task on account insert');
+  }
+  
+  @IsTest
+  static void testUpdateAccountTriggersApex() {
+    Account acc = new Account(Name = 'Acme', Revenue__c = 100000);
     insert acc;
     
     Test.startTest();
-    
-    // Enqueue job
-    System.enqueueJob(new UpdateExternalSystemQueueable(new List<Account>{acc}));
-    
-    Test.stopTest();  // Force async jobs to execute in test
-    
-    // Verify result
-    System.assertEquals('Updated', [SELECT Name FROM Account WHERE Id = :acc.Id].Name);
-  }
-}
-```
-
-### Testing Scheduled Jobs
-
-```apex
-@IsTest
-private class RefreshCoverageSchedulableTest {
-  @IsTest
-  static void testSchedulableExecution() {
-    Test.startTest();
-    
-    // Execute the schedulable directly (avoid Test.schedule)
-    RefreshCoverageSchedulable schedulable = new RefreshCoverageSchedulable();
-    SchedulableContext mockContext = null;
-    schedulable.execute(mockContext);  // Call execute() directly
-    
+    acc.Revenue__c = 200000;
+    update acc;  // Triggers before/after-update
     Test.stopTest();
     
-    // Verify expected result
-    Integer logCount = [SELECT COUNT() FROM CodeCoverageLog__c];
-    System.assert(logCount > 0, 'Should have logged coverage');
-  }
-}
-```
-
-**Important**: Do NOT use Test.schedule() for callout-enabled schedulables. Call execute() directly instead.
-
-### Testing Batch Jobs
-
-```apex
-@IsTest
-private class UpdateAccountsBatchTest {
-  @IsTest
-  static void testBatchExecution() {
-    // Create test data
-    List<Account> accounts = new List<Account>();
-    for (Integer i = 0; i < 250; i++) {
-      accounts.add(new Account(Name = 'Account ' + i));
-    }
-    insert accounts;
-    
-    Test.startTest();
-    
-    // Execute batch with batch size
-    Database.executeBatch(new UpdateAccountsBatch(), 200);
-    
-    Test.stopTest();
-    
-    // Verify all updated
-    System.assertEquals(250, [SELECT COUNT() FROM Account WHERE Updated__c = true]);
+    // Verify trigger logic executed
+    Account updated = [SELECT Id, Processed__c FROM Account WHERE Id = :acc.Id];
+    System.assertEquals(true, updated.Processed__c, 'Trigger should set Processed flag');
   }
 }
 ```
 
 ---
 
-## Testing Flows
+## Flow Testing
 
-### Manual Testing Steps
+Flow testing is primarily manual or via Apex integration tests. Flows don't have isolated unit tests.
 
-1. Go to Flow Builder
-2. Run the flow manually (Flow → Details → Run)
-3. Provide inputs
+### Manual Testing in Flow Builder
+
+1. Open Flow Builder
+2. Click "Run" (or "Run in New Window")
+3. Provide test inputs
 4. Verify outputs and side effects
 
-### Automated Testing (Apex)
+### Testing Flows via Apex
 
-Flows are hard to test in Apex. Instead, test the Apex triggered by flows.
+Test the Apex triggered by or invoked from flows:
 
 ```apex
 @IsTest
-private class AccountFlowIntegrationTest {
+private class FlowInvocationTest {
   @IsTest
-  static void testAccountFlowLogic() {
-    // Create account (triggers record-triggered flow)
-    Account acc = new Account(Name = 'Test');
-    insert acc;  // Flow fires after insert
+  static void testInvocableFlowAction() {
+    // Flow calls Apex action
+    Map<String, Object> inputs = new Map<String, Object>{
+      'accountIds' => new List<Id>{/* test IDs */},
+      'status' => 'Active'
+    };
     
-    // Verify flow updated related records
-    List<Task> tasks = [SELECT Id FROM Task WHERE WhoId = :acc.OwnerId];
+    Flow.Interview.UpdateAccountsFlow flow = new Flow.Interview.UpdateAccountsFlow(inputs);
+    
+    Test.startTest();
+    flow.start();
+    Test.stopTest();
+    
+    // Verify flow action updated records
+    List<Account> accounts = [SELECT Status__c FROM Account WHERE Status__c = 'Active'];
+    System.assert(!accounts.isEmpty());
+  }
+  
+  @IsTest
+  static void testRecordTriggeredFlowSideEffects() {
+    Account acc = new Account(Name = 'Acme');
+    
+    Test.startTest();
+    insert acc;  // Record-triggered flow fires
+    Test.stopTest();
+    
+    // Verify flow created related records
+    List<Task> tasks = [SELECT Id FROM Task WHERE WhatId = :acc.Id];
     System.assert(!tasks.isEmpty(), 'Flow should create task');
   }
 }
@@ -341,9 +419,9 @@ private class AccountFlowIntegrationTest {
 
 ---
 
-## Testing LWC with Jest
+## LWC Testing with Jest
 
-Jest tests LWC in isolation (no Apex, no Salesforce org).
+LWC tests run in isolation using Jest (no Apex, no Salesforce org).
 
 ### Setup
 
@@ -351,10 +429,9 @@ Jest tests LWC in isolation (no Apex, no Salesforce org).
 npm install --save-dev @salesforce/sfdx-lwc-jest jest
 ```
 
-### Test Example
+### Basic Test Structure
 
 ```javascript
-import { LightningElement } from 'lwc';
 import { createElement } from 'lwc';
 import MyComponent from 'c/myComponent';
 
@@ -377,13 +454,142 @@ describe('MyComponent', () => {
     expect(button).toBeTruthy();
   });
   
-  it('increments counter on click', () => {
+  it('increments counter on click', async () => {
     const button = element.shadowRoot.querySelector('button');
     button.click();
     
+    await element.updateComplete;
     expect(element.counter).toBe(1);
   });
 });
+```
+
+### Mocking Apex Calls
+
+```javascript
+import getAccounts from '@salesforce/apex/AccountController.getAccounts';
+
+jest.mock('@salesforce/apex/AccountController.getAccounts', () => ({
+  default: jest.fn()
+}), { virtual: true });
+
+describe('AccountList', () => {
+  it('displays accounts', async () => {
+    const mockAccounts = [
+      { Id: '001', Name: 'Acme' },
+      { Id: '002', Name: 'Widgets Inc' }
+    ];
+    
+    getAccounts.mockResolvedValue(mockAccounts);
+    
+    const element = createElement('c-account-list', { is: AccountList });
+    document.body.appendChild(element);
+    
+    await element.updateComplete;
+    
+    const rows = element.shadowRoot.querySelectorAll('tr');
+    expect(rows.length).toBe(2);
+  });
+});
+```
+
+### Testing Wire Adapters
+
+```javascript
+import getRecord from '@salesforce/apex/AccountController.getRecord';
+
+describe('AccountDetail', () => {
+  it('loads account data via wire', async () => {
+    const mockAccount = { Id: '001', Name: 'Acme Corp' };
+    
+    getRecord.mockResolvedValue(mockAccount);
+    
+    const element = createElement('c-account-detail', { is: AccountDetail });
+    element.recordId = '001';
+    document.body.appendChild(element);
+    
+    await element.updateComplete;
+    
+    const name = element.shadowRoot.textContent;
+    expect(name).toContain('Acme Corp');
+  });
+});
+```
+
+For detailed LWC Jest patterns, see the LWC Jest testing guide.
+
+---
+
+## Async Code Testing
+
+### Testing Queueable Jobs
+
+```apex
+@IsTest
+private class UpdateAccountsQueueableTest {
+  @IsTest
+  static void testQueueableExecution() {
+    Account acc = new Account(Name = 'Test Acme');
+    insert acc;
+    
+    Test.startTest();
+    System.enqueueJob(new UpdateAccountsQueueable(new List<Account>{acc}));
+    Test.stopTest();
+    
+    // Verify job completed
+    Account updated = [SELECT Name FROM Account WHERE Id = :acc.Id];
+    System.assertEquals('Updated Acme', updated.Name);
+  }
+}
+```
+
+### Testing Scheduled Jobs
+
+**Important**: Do NOT use `Test.schedule()` for callout-enabled schedulables. Call `execute()` directly:
+
+```apex
+@IsTest
+private class RefreshDataSchedulableTest {
+  @IsTest
+  static void testSchedulableExecution() {
+    Test.startTest();
+    
+    // Call execute() directly, don't use Test.schedule()
+    RefreshDataSchedulable schedulable = new RefreshDataSchedulable();
+    schedulable.execute(null);
+    
+    Test.stopTest();
+    
+    // Verify result
+    Integer logCount = [SELECT COUNT() FROM ProcessLog__c];
+    System.assert(logCount > 0);
+  }
+}
+```
+
+### Testing Batch Jobs
+
+```apex
+@IsTest
+private class UpdateAccountsBatchTest {
+  @IsTest
+  static void testBatchExecution() {
+    // Create test data
+    List<Account> accounts = new List<Account>();
+    for (Integer i = 0; i < 250; i++) {
+      accounts.add(new Account(Name = 'Account ' + i));
+    }
+    insert accounts;
+    
+    Test.startTest();
+    Database.executeBatch(new UpdateAccountsBatch(), 200);
+    Test.stopTest();
+    
+    // Verify all updated
+    Integer count = [SELECT COUNT() FROM Account WHERE Updated__c = true];
+    System.assertEquals(250, count);
+  }
+}
 ```
 
 ---
@@ -394,14 +600,12 @@ describe('MyComponent', () => {
 
 ```apex
 @IsTest
-static void testWithNullValues() {
-  Account acc = new Account(Name = null);  // Required field null
-  
+static void testNullValues() {
   try {
-    insert acc;
-    System.assert(false, 'Should fail with null Name');
-  } catch (DmlException ex) {
-    System.assert(ex.getMessage().contains('Required'));
+    AccountService.calculateRevenue(null);
+    System.assert(false, 'Should throw exception');
+  } catch (NullPointerException ex) {
+    System.assert(true);
   }
 }
 ```
@@ -410,12 +614,8 @@ static void testWithNullValues() {
 
 ```apex
 @IsTest
-static void testWithEmptyList() {
-  List<Account> accounts = new List<Account>();
-  
-  // Service should handle empty list gracefully
-  List<Account> result = AccountService.updateAccounts(accounts);
-  
+static void testEmptyList() {
+  List<Account> result = AccountService.updateAccounts(new List<Account>{});
   System.assertEquals(0, result.size());
 }
 ```
@@ -428,7 +628,6 @@ static void testDuplicateHandling() {
   Account acc = new Account(Name = 'Acme', External_Id__c = 'EXT123');
   insert acc;
   
-  // Try to insert duplicate
   Account duplicate = new Account(Name = 'Acme', External_Id__c = 'EXT123');
   
   try {
@@ -440,26 +639,14 @@ static void testDuplicateHandling() {
 }
 ```
 
-### Large Numbers
-
-```apex
-@IsTest
-static void testLargeNumberCalculation() {
-  Decimal largeNumber = 999999999999999999D;
-  Decimal result = AccountService.calculateTotal(largeNumber);
-  
-  System.assertEquals(largeNumber, result);
-}
-```
-
 ---
 
-## Governor Limit Testing
+## Governor Limit Assertions
 
 ```apex
 @IsTest
-static void testQueryLimit() {
-  // Create 100+ accounts to test query limits
+static void testGovernorLimits() {
+  // Create 100+ records
   List<Account> accounts = new List<Account>();
   for (Integer i = 0; i < 100; i++) {
     accounts.add(new Account(Name = 'Account ' + i));
@@ -467,32 +654,32 @@ static void testQueryLimit() {
   insert accounts;
   
   Test.startTest();
-  
-  // Method that queries accounts in loop
   AccountService.processAccounts(accounts);
-  
   Test.stopTest();
   
   // Assert within limits
-  Integer queries = Limits.getQueries();
-  System.assert(queries < 100, 'Exceeded 100 SOQL query limit: ' + queries);
+  System.assert(Limits.getQueries() < 100, 'Too many queries: ' + Limits.getQueries());
+  System.assert(Limits.getDmlRows() <= 100, 'Too much DML: ' + Limits.getDmlRows());
+  System.assert(Limits.getCpuTime() < 10000, 'CPU timeout');
 }
 ```
 
 ---
 
-## Test Class Checklist
+## Production Readiness Checklist
 
-- ✅ Test method names describe what's being tested
-- ✅ All public methods have at least one test
+- ✅ 90%+ code coverage (all branches tested, not just happy path)
+- ✅ All public methods tested
 - ✅ Happy path tested
-- ✅ Error paths tested (try-catch)
-- ✅ Edge cases tested (null, empty, large)
-- ✅ Bulk testing (200+ records)
-- ✅ Permission testing (System.runAs with limited user)
-- ✅ Governor limits checked
-- ✅ 90%+ code coverage
-- ✅ SeeAllData=false (tests are org-agnostic)
+- ✅ Error paths tested (catch blocks, exceptions)
+- ✅ Edge cases tested (null, empty, large values)
+- ✅ Bulk testing with 200+ records
+- ✅ Permission testing with System.runAs (non-admin users)
+- ✅ Governor limits checked (queries, DML, CPU)
+- ✅ Integration testing (trigger + flow + Apex)
+- ✅ Async code tested (Queueable, Batch, Scheduled)
+- ✅ @IsTest(SeeAllData=false) — tests are org-agnostic
 - ✅ No hardcoded IDs in tests
-- ✅ Test data cleaned up (or @TestSetup used)
-
+- ✅ Wire adapter errors handled (LWC tests)
+- ✅ Jest tests for LWC (component logic)
+- ✅ Flow tested via Apex integration tests

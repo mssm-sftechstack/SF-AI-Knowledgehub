@@ -1,155 +1,243 @@
 # LWC Best Practices
 
-Lightning Web Components (LWC) are modern JavaScript components for Salesforce UIs. This guide covers lifecycle, state management, error handling, accessibility, and testing.
+Lightning Web Components (LWC) are the modern framework for Salesforce UIs. This guide covers lifecycle, state management, wire adapters, error handling, and cross-component integration.
 
----
+## Component Lifecycle
 
-## Lifecycle Hooks
-
-LWC has four main lifecycle hooks that fire in order:
+```mermaid
+flowchart TD
+    A["Component Instantiated"] --> B["constructor()"]
+    B --> C["Component Added to DOM"]
+    C --> D["connectedCallback()"]
+    D --> E["Component Rendered"]
+    E --> F["renderedCallback()"]
+    F --> G{"State or Wire<br/>Changes?"}
+    G -->|Yes| H["Re-render Cycle"]
+    H --> F
+    G -->|No| I["Component Active<br/>Waiting for Events"]
+    I --> J["User Removes Component"]
+    J --> K["disconnectedCallback()"]
+    K --> L["Cleanup Complete"]
+```
 
 ### 1. constructor()
 
-Runs once when component is created. Use for initialization.
+Runs once when the component class is instantiated. Use for setting default values.
 
 ```javascript
 export default class MyComponent extends LightningElement {
   counter = 0;
+  items = [];
   
   constructor() {
     super();
-    console.log('Component created, counter =', this.counter);
+    this.counter = 0;  // Initialize default state
   }
 }
 ```
 
-**Use for**: Setting default values, initializing state.
+**Use for**: Default values, primitive initialization.
 
-**Don't use for**: DOM access, Apex calls (too early, DOM not ready).
+**Don't use for**: DOM access, Apex calls, async operations (DOM not ready yet).
 
 ### 2. connectedCallback()
 
-Runs when component is added to DOM. Use for setup that needs DOM.
+Runs when the component is added to the DOM. Use for setup that requires the DOM to exist.
 
 ```javascript
 export default class MyComponent extends LightningElement {
+  @track data;
+  @track isLoading = false;
+  
   connectedCallback() {
-    console.log('Component in DOM');
     this.loadData();
+    this.subscribeToUpdates();
   }
   
-  loadData() {
-    // Safe to use this.template.querySelector() here
+  async loadData() {
+    this.isLoading = true;
+    try {
+      this.data = await getAccountData();
+    } catch (error) {
+      console.error('Load failed:', error);
+    } finally {
+      this.isLoading = false;
+    }
+  }
+  
+  subscribeToUpdates() {
+    // Safe to access DOM or subscribe to channels here
   }
 }
 ```
 
-**Use for**: Apex calls, loading initial data, subscribing to events.
+**Use for**: Apex calls, loading initial data, subscribing to events, DOM queries.
 
-**Don't use for**: Final DOM access (use renderedCallback).
+**Don't use for**: renderedCallback tasks (template not fully updated yet).
 
 ### 3. renderedCallback()
 
-Runs after every render cycle (after HTML updates). Use for DOM access.
+Runs after every render cycle, when the DOM is fully updated. Use for DOM manipulation that depends on the current template state.
 
 ```javascript
 export default class MyComponent extends LightningElement {
   @track isLoading = false;
   
   renderedCallback() {
-    // DOM is now fully updated
-    const button = this.template.querySelector('[data-id="submit"]');
-    if (button) {
-      button.focus();  // Set focus after render
+    // DOM is fully updated here
+    const submitButton = this.template.querySelector('[data-id="submit"]');
+    
+    if (submitButton) {
+      submitButton.focus();
     }
   }
 }
 ```
 
-**Use for**: DOM manipulation, focus management, scrolling, animations.
+**Use for**: Focus management, scrolling, animations, measuring DOM, final DOM checks.
 
-**Don't use for**: Apex calls in a loop (causes performance issues).
+**Don't use for**: Apex calls in loops (causes excessive re-renders and performance issues).
+
+**Important**: renderedCallback can fire multiple times per render cycle. Use flags to prevent duplicate work.
+
+```javascript
+renderedCallback() {
+  if (this.hasSetFocus) {
+    return;
+  }
+  
+  const input = this.template.querySelector('input');
+  if (input) {
+    input.focus();
+    this.hasSetFocus = true;
+  }
+}
+```
 
 ### 4. disconnectedCallback()
 
-Runs when component is removed from DOM. Use for cleanup.
+Runs when the component is removed from the DOM. Use for cleanup.
 
 ```javascript
 export default class MyComponent extends LightningElement {
   unsubscribeHandler;
   
   connectedCallback() {
-    // Subscribe to event
+    // Subscribe to channel
     this.unsubscribeHandler = subscribe(null, MY_CHANNEL, (message) => {
       this.handleMessage(message);
     });
   }
   
   disconnectedCallback() {
-    // Unsubscribe (prevent memory leak)
-    unsubscribe(this.unsubscribeHandler);
+    // Always unsubscribe to prevent memory leaks
+    if (this.unsubscribeHandler) {
+      unsubscribe(this.unsubscribeHandler);
+    }
   }
 }
 ```
 
-**Use for**: Cleaning up subscriptions, timers, event listeners.
+**Use for**: Unsubscribing from channels, clearing timers, removing event listeners.
 
 ---
 
 ## State Management with @track
 
-The `@track` decorator tells LWC to track a property for reactivity.
+The `@track` decorator makes a property reactive. When tracked properties change, the component re-renders.
 
-### Primitive Values
+### Primitives and Immutability
 
 ```javascript
 export default class MyComponent extends LightningElement {
   @track firstName = 'John';
+  @track count = 0;
   
   handleChange(event) {
+    // Primitives are simple: assign directly
     this.firstName = event.target.value;  // Triggers re-render
+    this.count = this.count + 1;  // Triggers re-render
   }
 }
 ```
 
-### Objects & Arrays
+### Objects and Arrays (Immutable Update)
 
 ```javascript
 export default class MyComponent extends LightningElement {
-  @track user = {
-    name: 'John',
-    email: 'john@example.com'
-  };
-  
+  @track user = { name: 'John', email: 'john@example.com' };
   @track items = [];
   
   addItem(item) {
-    // ❌ Wrong (doesn't trigger re-render)
+    // ❌ Wrong: mutation doesn't guarantee re-render
     this.items.push(item);
     
-    // ✅ Right (creates new array, triggers re-render)
+    // ✅ Right: create new array (immutable pattern)
     this.items = [...this.items, item];
   }
   
-  updateUser() {
-    // ❌ Wrong (mutating object, may not trigger re-render)
-    this.user.name = 'Jane';
+  updateUser(newName) {
+    // ❌ Wrong: mutating object property
+    this.user.name = newName;
     
-    // ✅ Right (creates new object, triggers re-render)
-    this.user = { ...this.user, name: 'Jane' };
+    // ✅ Right: create new object
+    this.user = { ...this.user, name: newName };
+  }
+  
+  removeItem(index) {
+    // ✅ Right: filter creates new array
+    this.items = this.items.filter((_, i) => i !== index);
   }
 }
 ```
 
-**Key Rule**: For arrays and objects, create a new instance to trigger re-rendering. Mutation alone may not work.
+**Key rule**: For objects and arrays, create a new instance when updating. Mutation alone may not trigger re-rendering.
+
+### From Order of Execution Perspective
+
+When a trigger or flow updates a record, LWC sees the change asynchronously:
+
+1. **Trigger fires** (synchronous) → updates Account record
+2. **Flow runs** (asynchronous) → updates Account record
+3. **LWC wire adapter cached** (still shows old data)
+4. **User must refresh** or wire adapter must re-execute
+
+```javascript
+export default class AccountDetail extends LightningElement {
+  @track accountId;
+  @track account;
+  
+  @wire(getRecord, { recordId: '$accountId', fields: [NAME_FIELD] })
+  wiredAccount({ data, error }) {
+    if (data) {
+      this.account = data;
+    }
+  }
+  
+  async handleSave() {
+    try {
+      await updateAccount({ accountId: this.accountId, name: this.newName });
+      
+      // Trigger ran and updated the record
+      // But LWC doesn't see the change yet (different transaction)
+      
+      // Force refresh of wire data
+      await refreshApex(this.wiredAccount);
+      
+    } catch (error) {
+      console.error('Update failed:', error);
+    }
+  }
+}
+```
 
 ---
 
-## Wire Adapters for Data
+## Wire Adapters for Reactive Data Loading
 
-Wire adapters fetch data reactively. Use `@wire` decorator.
+Wire adapters (decorated with `@wire`) automatically fetch data and refresh when dependencies change.
 
-### Wiring Apex Methods
+### Basic Wire Adapter (No Parameters)
 
 ```javascript
 import { LightningElement, wire } from 'lwc';
@@ -172,15 +260,15 @@ export default class AccountList extends LightningElement {
 }
 ```
 
-### Wiring with Parameters
+### Wire Adapter with Reactive Parameters
 
 ```javascript
 export default class AccountDetail extends LightningElement {
-  @track accountId;
+  @track accountId;  // Changes to this trigger wire re-execution
   account;
   error;
   
-  @wire(getAccount, { accountId: '$accountId' })
+  @wire(getAccount, { accountId: '$accountId' })  // $ makes parameter reactive
   wiredAccount({ data, error }) {
     if (data) {
       this.account = data;
@@ -191,23 +279,20 @@ export default class AccountDetail extends LightningElement {
 }
 ```
 
-The `$` prefix makes it reactive: when `accountId` changes, wire automatically re-fetches.
+The `$` prefix makes the parameter reactive. When `accountId` changes, the wire automatically calls `getAccount` again.
 
-### Wiring Record Data (LDS)
+### Record Data with Lightning Data Service (LDS)
 
 ```javascript
 import { LightningElement, wire } from 'lwc';
-import { getRecord } from 'lightning/uiRecordApi';
+import { getRecord, getFieldValue } from 'lightning/uiRecordApi';
 import NAME_FIELD from '@salesforce/schema/Account.Name';
 import PHONE_FIELD from '@salesforce/schema/Account.Phone';
 
 export default class AccountDetail extends LightningElement {
-  @track recordId = '0011q00000YeKrQAAV';
+  @track recordId = '001a0000001Igf';
   
-  @wire(getRecord, { 
-    recordId: '$recordId', 
-    fields: [NAME_FIELD, PHONE_FIELD]
-  })
+  @wire(getRecord, { recordId: '$recordId', fields: [NAME_FIELD, PHONE_FIELD] })
   account;
   
   get accountName() {
@@ -220,26 +305,70 @@ export default class AccountDetail extends LightningElement {
 }
 ```
 
+### Imperative Apex Calls (vs. Wire)
+
+Use imperative calls when you need control over when the call executes:
+
+```javascript
+import createAccount from '@salesforce/apex/AccountController.createAccount';
+
+export default class CreateAccountForm extends LightningElement {
+  @track accountName = '';
+  
+  async handleCreate() {
+    try {
+      const result = await createAccount({ name: this.accountName });
+      console.log('Account created:', result);
+    } catch (error) {
+      console.error('Create failed:', error);
+    }
+  }
+}
+```
+
+**Wire vs. Imperative**:
+| Pattern | When to Use |
+|---------|------------|
+| @wire | Declarative, reactive to parameter changes, caching, automatic re-fetch |
+| Imperative (await) | User-triggered actions, conditional calls, error control |
+
+### Refreshing Cached Data
+
+When a wire call is cached, refreshing it requires explicit action:
+
+```javascript
+import { refreshApex } from '@salesforce/apex';
+
+export default class AccountList extends LightningElement {
+  @wire(getAccounts)
+  wiredAccounts;
+  
+  async handleAccountUpdated() {
+    // Refresh the cached wire data
+    await refreshApex(this.wiredAccounts);
+  }
+}
+```
+
 ---
 
 ## Error Handling
 
-### Pattern 1: Try-Catch for Apex Calls
+### Server-Side Errors (Apex)
 
 ```javascript
 export default class MyComponent extends LightningElement {
   @track isLoading = false;
-  error = null;
+  error;
   
-  async handleSave() {
+  async handleSave(name) {
     try {
       this.isLoading = true;
       this.error = null;
       
-      const result = await createAccount({ name: 'Acme' });
-      console.log('Account created:', result);
+      await createAccount({ name: name });
       
-      // Show success message
+      // Success
       this.dispatchEvent(
         new ShowToastEvent({
           title: 'Success',
@@ -248,8 +377,8 @@ export default class MyComponent extends LightningElement {
         })
       );
     } catch (error) {
-      console.error('Error creating account:', error);
-      this.error = error.body.message;
+      // Server-side error
+      this.error = error.body?.message || 'Unknown error';
       
       this.dispatchEvent(
         new ShowToastEvent({
@@ -265,7 +394,7 @@ export default class MyComponent extends LightningElement {
 }
 ```
 
-### Pattern 2: Handling Wire Errors
+### Wire Adapter Errors
 
 ```javascript
 export default class AccountList extends LightningElement {
@@ -278,7 +407,8 @@ export default class AccountList extends LightningElement {
       this.accounts = data;
       this.error = undefined;
     } else if (error) {
-      this.error = 'Unable to load accounts: ' + error.body.message;
+      // Wire error (network, security, etc.)
+      this.error = error.body?.message || 'Failed to load accounts';
       this.accounts = undefined;
     }
   }
@@ -289,29 +419,31 @@ export default class AccountList extends LightningElement {
 }
 ```
 
-### Pattern 3: User-Friendly Error Messages
+### Client-Side Errors (User Input)
 
 ```javascript
-handleError(error) {
-  let message = 'An error occurred';
+export default class FormComponent extends LightningElement {
+  @track email = '';
+  emailError;
   
-  if (error.body) {
-    if (error.body.message) {
-      message = error.body.message;  // Server error
-    } else if (Array.isArray(error.body)) {
-      message = error.body[0].message;  // Multiple errors, take first
-    }
-  } else {
-    message = error.message;  // Network error
+  handleEmailChange(event) {
+    this.email = event.target.value;
+    this.emailError = null;
   }
   
-  this.dispatchEvent(
-    new ShowToastEvent({
-      title: 'Error',
-      message: message,
-      variant: 'error'
-    })
-  );
+  handleSubmit() {
+    // Validate before sending
+    if (!this.isValidEmail(this.email)) {
+      this.emailError = 'Invalid email address';
+      return;
+    }
+    
+    this.submitForm();
+  }
+  
+  isValidEmail(email) {
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+  }
 }
 ```
 
@@ -319,57 +451,58 @@ handleError(error) {
 
 ## Accessibility (a11y)
 
-### Rule 1: Use Semantic HTML
+### Semantic HTML
 
 ```html
-<!-- ❌ Wrong (div is not accessible) -->
+<!-- ❌ Wrong: div not accessible -->
 <div onclick={handleClick} role="button">Click me</div>
 
-<!-- ✅ Right (button is semantic) -->
+<!-- ✅ Right: button is semantic -->
 <button onclick={handleClick}>Click me</button>
 ```
 
-### Rule 2: Label Form Inputs
+### Label Form Inputs
 
 ```html
-<!-- ❌ Wrong (no label) -->
+<!-- ❌ Wrong: no label -->
 <input type="text" placeholder="Name">
 
-<!-- ✅ Right (input has label) -->
+<!-- ✅ Right: label associated -->
 <label for="nameInput">Name</label>
 <input id="nameInput" type="text">
 ```
 
-### Rule 3: Alt Text for Images
+### Alt Text for Images
 
 ```html
-<!-- ❌ Wrong (no alt text) -->
-<img src="icon.png">
-
-<!-- ✅ Right (alt text provided) -->
+<!-- ✅ Informative alt text -->
 <img src="icon.png" alt="Account icon">
 
-<!-- ✅ Right (decorative, alt empty) -->
+<!-- ✅ Decorative image, empty alt -->
 <img src="decoration.png" alt="">
 ```
 
-### Rule 4: Color is Not the Only Indicator
+### Color Not Only Indicator
 
 ```html
-<!-- ❌ Wrong (only red color indicates error) -->
+<!-- ❌ Wrong: only red color indicates error -->
 <span style="color: red;">Error</span>
 
-<!-- ✅ Right (text and color) -->
+<!-- ✅ Right: text and icon -->
 <span class="error-icon">⚠️</span> <span>Error message</span>
 ```
 
-### Rule 5: Keyboard Navigation
+### Keyboard Navigation
 
 ```javascript
 export default class Modal extends LightningElement {
   handleKeyDown(event) {
     if (event.key === 'Escape') {
-      this.closeModal();  // Close on Escape
+      this.closeModal();
+    }
+    
+    if (event.key === 'Tab') {
+      // Focus management if needed
     }
   }
 }
@@ -377,56 +510,52 @@ export default class Modal extends LightningElement {
 
 ---
 
-## DOM Access Best Practices
+## DOM Access Patterns
 
-### Pattern 1: Using this.template
+### Use this.template Scope
 
 ```javascript
 export default class MyComponent extends LightningElement {
   handleClick() {
-    // ✅ Right (scoped to component)
+    // ✅ Right: scoped to component
     const button = this.template.querySelector('button');
     
-    // ❌ Wrong (searches entire document)
+    // ❌ Wrong: searches entire document
     const button = document.querySelector('button');
   }
 }
 ```
 
-### Pattern 2: Safe DOM Queries
+### Safe Queries with Null Check
 
 ```javascript
 renderedCallback() {
   const input = this.template.querySelector('[data-id="email"]');
   
-  if (input) {  // Always check if element exists
+  if (input) {  // Always check existence
     input.focus();
   }
 }
 ```
 
-### Pattern 3: Avoiding Common Mistakes
+### Avoid innerHTML (XSS Risk)
 
 ```javascript
-// ❌ Wrong (mutating DOM directly)
+// ❌ Wrong: innerHTML can execute scripts
 connectedCallback() {
   const div = this.template.querySelector('div');
-  div.innerHTML = '<strong>Bold</strong>';  // XSS risk
+  div.innerHTML = userContent;  // XSS vulnerability
 }
 
-// ✅ Right (using LWC binding)
-template: `
-  <template if:true={isBold}>
-    <strong>{text}</strong>
-  </template>
-`
+// ✅ Right: Use LWC binding (auto-escaped)
+@track message = userContent;  // Safe in template
 ```
 
 ---
 
 ## Conditional Rendering
 
-### Using if:true and if:false
+### if:true and if:false
 
 ```html
 <template if:true={isLoading}>
@@ -444,7 +573,7 @@ template: `
 </template>
 ```
 
-### Using if:true with @track
+### Toggling Visibility
 
 ```javascript
 export default class MyComponent extends LightningElement {
@@ -460,7 +589,7 @@ export default class MyComponent extends LightningElement {
 
 ## Looping Best Practices
 
-### Use key for Unique Identity
+### Key Attribute for Identity
 
 ```html
 <template for:each={items} for:item="item">
@@ -470,28 +599,28 @@ export default class MyComponent extends LightningElement {
 </template>
 ```
 
-The `key` attribute must be unique for each item in the list. Without it, LWC can't track which item changed.
+The `key` must be unique for each item. Without it, LWC can't track which items changed and may re-use DOM nodes incorrectly.
 
-### Avoid Complex Expressions in Loops
+### Pre-process Complex Data
 
-```html
-<!-- ❌ Wrong (calling method in loop) -->
-<template for:each={items} for:item="item">
-  <p>{getFormattedDate(item.date)}</p>
-</template>
-
-<!-- ✅ Right (pre-process in JavaScript) -->
-<!-- Template: -->
-<template for:each={formattedItems} for:item="item">
-  <p>{item.formattedDate}</p>
-</template>
-
-<!-- JavaScript: -->
-get formattedItems() {
-  return this.items.map(item => ({
-    ...item,
-    formattedDate: this.formatDate(item.date)
-  }));
+```javascript
+export default class MyComponent extends LightningElement {
+  @track items = [];
+  
+  // ❌ Wrong: calling method in template loop
+  // <p>{getFormattedDate(item.date)}</p>
+  
+  // ✅ Right: pre-compute in getter
+  get formattedItems() {
+    return this.items.map(item => ({
+      ...item,
+      formattedDate: this.formatDate(item.date)
+    }));
+  }
+  
+  formatDate(date) {
+    return new Intl.DateTimeFormat('en-US').format(new Date(date));
+  }
 }
 ```
 
@@ -499,48 +628,36 @@ get formattedItems() {
 
 ## Common Mistakes
 
-### Mistake 1: Modifying Array Without Re-render
+### Mistake 1: Array Mutation Without Re-render
 
 ```javascript
-// ❌ Wrong
-this.items.push(newItem);  // Array changes, but re-render may not happen
+// ❌ Wrong: mutation alone may not trigger re-render
+this.items.push(newItem);
 
-// ✅ Right
-this.items = [...this.items, newItem];  // New array, triggers re-render
+// ✅ Right: create new array
+this.items = [...this.items, newItem];
 ```
 
 ### Mistake 2: Missing $ in Wire Parameters
 
 ```javascript
-// ❌ Wrong (accountId doesn't react to changes)
+// ❌ Wrong: accountId doesn't react to changes
 @wire(getAccount, { accountId: accountId })
 
-// ✅ Right (accountId reacts to changes)
+// ✅ Right: accountId reacts
 @wire(getAccount, { accountId: '$accountId' })
 ```
 
-### Mistake 3: XSS Vulnerability (innerHTML)
+### Mistake 3: Not Handling Wire Errors
 
 ```javascript
-// ❌ Wrong
-this.message = '<strong>Bold</strong>';
-template: `<div>{message}</div>`  // Safe (automatic escaping)
-this.innerHTML = message;  // XSS risk if message contains <img onerror>
-
-// ✅ Right
-template: `<div>{message}</div>`  // Auto-escaped, safe
-```
-
-### Mistake 4: Not Handling Wire Errors
-
-```javascript
-// ❌ Wrong (no error handling)
+// ❌ Wrong: no error handling
 @wire(getAccounts)
 wiredAccounts(data) {
   this.accounts = data;
 }
 
-// ✅ Right (handles both data and error)
+// ✅ Right: handle both data and error
 @wire(getAccounts)
 wiredAccounts({ data, error }) {
   if (data) {
@@ -551,19 +668,21 @@ wiredAccounts({ data, error }) {
 }
 ```
 
-### Mistake 5: Not Unsubscribing from Channels
+### Mistake 4: Memory Leaks from Subscriptions
 
 ```javascript
-// ❌ Wrong (memory leak)
+// ❌ Wrong: subscription never cleaned up
 connectedCallback() {
   subscribe(null, MY_CHANNEL, this.handleMessage);
 }
 
-// ✅ Right (clean up on disconnect)
+// ✅ Right: unsubscribe on disconnect
 unsubscribeHandler;
 
 connectedCallback() {
-  this.unsubscribeHandler = subscribe(null, MY_CHANNEL, this.handleMessage);
+  this.unsubscribeHandler = subscribe(null, MY_CHANNEL, (msg) => {
+    this.handleMessage(msg);
+  });
 }
 
 disconnectedCallback() {
@@ -571,26 +690,40 @@ disconnectedCallback() {
 }
 ```
 
+### Mistake 5: renderedCallback Loops
+
+```javascript
+// ❌ Wrong: renderedCallback makes Apex call every render
+renderedCallback() {
+  getAccountData();  // Called repeatedly!
+}
+
+// ✅ Right: use connectedCallback or wire for data
+connectedCallback() {
+  this.loadData();  // Called once
+}
+```
+
 ---
 
 ## Testing LWC with Jest
 
-See LWC Jest testing guide for detailed test patterns.
+See the LWC Jest testing guide for detailed patterns (mocking wire adapters, Apex calls, DOM assertions).
 
 ---
 
-## Checklist: LWC Ready for Production
+## Production Readiness Checklist
 
 - ✅ Uses `@wire` for data loading (reactive)
-- ✅ Error handling for all Apex calls
-- ✅ `@track` for reactive state
-- ✅ No hardcoded IDs
+- ✅ Error handling for all Apex calls (data and error cases)
+- ✅ `@track` for reactive state (with immutable updates for objects/arrays)
+- ✅ No hardcoded IDs (resolve dynamically via Apex)
 - ✅ Accessibility: labels, alt text, semantic HTML
-- ✅ Keyboard navigation working
-- ✅ No XSS vulnerabilities (no innerHTML)
-- ✅ DOM access after renderedCallback
-- ✅ Memory cleanup in disconnectedCallback
+- ✅ Keyboard navigation working (Escape, Tab, etc.)
+- ✅ No XSS vulnerabilities (no innerHTML, use textContent or template binding)
+- ✅ DOM access in renderedCallback, not connectedCallback
+- ✅ Memory cleanup in disconnectedCallback (unsubscribe, clear timers)
 - ✅ Loops have unique `key` attributes
 - ✅ All wire calls handle error case
-- ✅ Responsive design (mobile-friendly)
-
+- ✅ Responsive design (works on mobile)
+- ✅ Refreshing cached data when needed (await refreshApex)

@@ -1,34 +1,34 @@
 # Flow Best Practices
 
-Flows are powerful declarative automation tools. This guide covers best practices, common mistakes, and when to use Flow vs. Apex vs. Process Builder.
+Flow is the primary declarative automation tool for Salesforce. This guide covers when to use Flow, its constraints, common patterns, and gotchas across all component types.
 
----
+## When to Use Flow
 
-## When Flow Is the Right Tool
+Flow is your primary automation tool for declarative logic. Use it first. Invoke Apex from Flow only when Flow hits its constraints.
 
-### Use Flow When
+```mermaid
+flowchart TD
+    A["Automation Needed?"] --> B{"Simple logic?<br/>LT 20 decisions?"}
+    B -->|Yes| C["User input needed?"]
+    B -->|No| D["Callout needed?"]
+    C -->|Yes| E["Screen Flow"]
+    C -->|No| F["Record-Triggered<br/>or Scheduled Flow"]
+    D -->|Yes| G["Use Apex Queueable<br/>Invoked from Flow"]
+    D -->|No| F
+```
 
-- **Logic is simple and visual** — Business logic that fits in 20 decisions or fewer
-- **Logic changes frequently** — Admins need to update without code deploy
-- **Subflows are needed** — Orchestrating multiple flows, breaking logic into reusable pieces
-- **Error recovery is needed** — Fault paths make error handling explicit
-- **Formula conditions are sufficient** — Decision logic can be expressed in formulas
-- **No callouts needed** — Pure data manipulation and logic
-- **Record-triggered on insert/update** — Declarative automation on save
-- **Screen flows for user input** — Multi-step screens, dynamic form building
+**Use Flow when**:
+- Logic is simple enough to visualize (under 20 decisions)
+- Business logic changes frequently (admins can update without code)
+- Subflows help organize complex flows into reusable pieces
+- Error recovery via fault paths is valuable
+- Formula conditions are sufficient for decisions
+- Multi-step user input is needed (screen flows)
 
-### Use Apex (Trigger) When
-
-- **Logic is complex** — More than 50 lines of business logic
-- **Callouts needed** — API calls to external systems (use Queueable from trigger)
-- **Performance is critical** — Bulk operations on 200+ records (Apex scales better)
-- **Reusable service logic needed** — Code that multiple triggers/classes share
-- **Detailed logging needed** — Audit trail of why decisions were made
-- **99%+ test coverage required** — Harder to test flows than Apex
-
-### Don't Use Process Builder
-
-Process Builder is deprecated. Use Flows instead.
+**Invoke Apex Queueable from Flow when**:
+- Callouts are required (Flow cannot call HTTP directly; use Queueable with `Database.AllowsCallouts`)
+- Bulk operations need Apex control (Queueable chaining for 200+ record batches)
+- Transaction-level control is critical (Flow's error recovery may not be sufficient)
 
 ---
 
@@ -36,101 +36,138 @@ Process Builder is deprecated. Use Flows instead.
 
 ### 1. Record-Triggered Flow
 
-**When**: Fires when a record is inserted/updated/deleted
+**When**: Fires when a record is inserted, updated, or deleted.
 
+**Example**:
 ```
-Trigger: Account insert → Record-Triggered Flow fires
-Flow logic: Update related records, send emails, create tasks
+Trigger: Account insert
+→ Record-Triggered Flow fires
+→ Update related Opportunities
+→ Send notification emails
+→ Create task
 ```
 
-**Constraints**:
+**Key Constraints**:
+- Runs asynchronously after the triggering DML (transaction is separate)
 - Cannot start from a screen
-- Runs in parallel (if 10 accounts inserted, 10 flow instances run simultaneously)
-- Cannot call other record-triggered flows (risk of infinite recursion)
-- Cannot query/filter starting records — receives all
+- Parallel execution: if 10 accounts insert, 10 flow instances run simultaneously
+- Cannot recursively call other record-triggered flows without a guard
+- Receives ALL inserted/updated records (cannot filter at trigger time)
+- 10-minute timeout per flow instance
 
-**Gotcha**: If 1,000 accounts insert, 1,000 flow instances spin up. If each loops through 10 opportunities, you hit limits fast.
+**Gotcha**: 1,000 account inserts = 1,000 flow instances spinning up in parallel. Each flow querying 10 opportunities hits governor limits fast.
 
-**Fix**: Use bulk testing (see below).
+**Fix**: Test with bulk data (see Bulk Testing section).
 
 ### 2. Screen Flow
 
-**When**: User-driven multi-step form
+**When**: Multi-step user-driven form in Lightning UI.
 
+**Example**:
 ```
-1. Name and Email screen
-2. Decision: Is email valid?
-3. Confirmation screen
-4. Submit → Create Contact
+Screen 1: Name and Email input
+→ Decision: Is email valid?
+→ Screen 2: Confirmation
+→ Screen 3: Submit → Create Contact
 ```
 
-**Constraints**:
-- Cannot be invoked from flows automatically (only from Lightning UI)
-- Cannot start from scheduled apex
-- Timeout: 30-minute inactivity closes the flow
+**Key Constraints**:
+- Only invoked from Lightning UI (not automatically from triggers or scheduled)
+- 30-minute inactivity timeout closes the flow
+- User must be in a session to interact
+- Cannot start from scheduled Apex or Platform Events
 
 ### 3. Scheduled Flow
 
-**When**: Runs at a specific time
+**When**: Automation runs at a specific scheduled time.
 
+**Example**:
 ```
-Scheduled: Every night at 2 AM
-Action: Check all Opportunities due in 7 days, send reminders
+Cron: Daily at 2 AM
+Action: Find all Opportunities due in 7 days → Send reminder emails
 ```
 
-**Constraints**:
-- Must be activated to run
-- No dynamic scheduling (time is fixed)
-- Runs in its own transaction
+**Key Constraints**:
+- Scheduling is fixed (no dynamic scheduling per-record)
+- Must be explicitly activated to run
+- Runs in its own transaction (separate from triggering records)
+- 10-minute timeout per execution
+- Cannot make callouts directly (use Queueable invoked from Flow)
 
 ### 4. Autolaunched Flow (Invocable)
 
-**When**: Called from another flow, Apex, or API
+**When**: Called from Apex, other flows, or REST API.
 
+**Example (from Apex)**:
 ```apex
-// Invoked from Apex
-Flow.Interview.CalculateAnnualSpendFlow interview = new Flow.Interview.CalculateAnnualSpendFlow(inputs);
+Map<String, Object> inputs = new Map<String, Object>();
+inputs.put('accountId', acc.Id);
+
+Flow.Interview.CalculateAnnualSpendFlow interview = 
+  new Flow.Interview.CalculateAnnualSpendFlow(inputs);
 interview.start();
 ```
 
-**Constraints**:
-- Must be explicitly started
-- Can be passed input variables
-- No visual/screen elements
+**Key Constraints**:
+- Must be explicitly started (not automatic)
+- Input/output variables must be defined in flow
+- No visual elements (logic only)
+- Returns output variables to invoker
+
+---
+
+## Flow Limits & Constraints
+
+### Per-Flow Governor Limits
+
+| Limit | Value | Impact |
+|-------|-------|--------|
+| SOQL queries | 100 | Large loops querying each record hit this |
+| Records returned per query | 50,000 | Rare, but collection sizes matter |
+| Loop iterations | 10,000 | Unusual; most loops exit earlier |
+| DML operations | 10,000 | Bulk inserts/updates in loops risk hitting this |
+| Time execution | 10 minutes | Long-running flows timeout |
+| Flow data size | ~25 MB | Large collections cause memory pressure |
+| Subflow depth | No hard limit | Deeply nested subflows become unmaintainable |
+
+### No Direct Callouts
+
+Flows **cannot make HTTP callouts directly**. Instead:
+1. Flow calls Apex invocable action
+2. Apex action (marked `@InvocableMethod`) makes callout via Queueable
+3. Queueable returns result to flow via output variable (if needed)
+
+This is a hard constraint, not a best practice.
 
 ---
 
 ## Subflows: Variable Passing & Scope
 
-### Basic Subflow Call
+### Basic Subflow Pattern
 
 ```xml
 <!-- Main Flow: AccountUpdate -->
-<flow:definition>
-  <!-- Call subflow -->
-  <actionCall type="subflow">
-    <label>Calculate Annual Spend</label>
-    <name>CalculateSpendSubflow</name>
-    <inputParameters>
-      <paramName>accountId</paramName>
-      <paramValue>{!accountRecord.Id}</paramValue>
-    </inputParameters>
-    <outputParameters>
-      <paramName>totalSpend</paramName>
-      <paramValue>{!totalSpend}</paramValue>
-    </outputParameters>
-    <faultPath>
-      <connector>HandleError</connector>
-    </faultPath>
-  </actionCall>
-</flow:definition>
+<actionCall type="subflow">
+  <label>Calculate Annual Spend</label>
+  <name>CalculateSpendSubflow</name>
+  <inputParameters>
+    <paramName>accountId</paramName>
+    <paramValue>{!accountRecord.Id}</paramValue>
+  </inputParameters>
+  <outputParameters>
+    <paramName>totalSpend</paramName>
+    <paramValue>{!totalSpend}</paramValue>
+  </outputParameters>
+  <faultPath>
+    <connector>HandleError</connector>
+  </faultPath>
+</actionCall>
 
 <!-- Subflow: CalculateSpendSubflow -->
 <flow:definition>
   <inputVariable name="accountId" type="id"/>
   <outputVariable name="totalSpend" type="number"/>
   
-  <!-- Get Opportunities and sum amounts -->
   <recordLookup>
     <inputParameters>
       <filterCondition>
@@ -144,37 +181,80 @@ interview.start();
 </flow:definition>
 ```
 
-### Best Practices for Subflows
+### Recursion Prevention — Required Pattern
+
+**Problem**: Record-triggered flow updates record → Same flow triggers again → Infinite loop.
+
+**Pattern**: Guard the flow start with a flag variable. Exit early if already processing.
+
+**Step 1: Check if flow is already running**
+```xml
+<!-- Create a boolean variable at flow level: var_isProcessing (default: false) -->
+<decision>
+  <label>Is Flow Already Processing?</label>
+  <condition>
+    <criterion>
+      <leftValueReference>{!var_isProcessing}</leftValueReference>
+      <operator>EqualTo</operator>
+      <rightValue>true</rightValue>
+    </criterion>
+  </condition>
+  <trueLabel>ExitFlow</trueLabel>
+  <falseLabel>ContinueProcessing</falseLabel>
+</decision>
+```
+
+**Step 2: Set the guard flag before any DML**
+```xml
+<assignment>
+  <label>Set Guard: Mark Flow as Processing</label>
+  <assignment>
+    <assignToReference>{!var_isProcessing}</assignToReference>
+    <operator>Assign</operator>
+    <value>true</value>
+  </assignment>
+</assignment>
+```
+
+**Step 3: Update the record (which will re-trigger the flow, but guard will block)**
+```xml
+<recordUpdate>
+  <inputParameters>
+    <name>Status__c</name>
+    <value>Updated</value>
+  </inputParameters>
+</recordUpdate>
+<!-- Flow re-triggers here, but decision at Step 1 sees var_isProcessing=true, exits -->
+```
+
+**Key points**:
+- Guard variable must be at flow level (not a record field, not a custom field)
+- Check guard FIRST, before expensive queries or DML
+- Set guard to true IMMEDIATELY after guard check
+- Exit immediately if guard is true (don't proceed to expensive work)
+- No need to reset guard manually (flow instance ends after execution)
+
+### Subflow Best Practices
 
 ✅ **Do**:
-- Pass only the data needed (e.g., `accountId`, not entire record)
-- Always include fault paths in subflow calls
+- Pass only required data (e.g., `accountId`, not the entire record object)
+- Always include fault paths on subflow calls
 - Name output variables clearly (e.g., `totalSpend`, not `result`)
 - Log subflow errors to admin
-- Test subflows independently
+- Test subflows independently before testing parent flow
 
 ❌ **Don't**:
-- Pass entire record objects (wastes memory)
-- Assume subflows will succeed (always add fault paths)
-- Create deeply nested subflows (hard to debug)
-- Pass sensitive data in variable names (shows in logs)
-- Call the same subflow recursively without guard
-
-### Recursion Prevention
-
-```
-1. In main flow, set a flag: Set Recursion_Guard = true
-2. In record-triggered flow, decision: Is Recursion_Guard = true?
-3. If yes, exit. If no, proceed.
-```
-
-This prevents infinite loops when subflows update records that trigger the parent flow again.
+- Pass entire record objects (wastes memory and performance)
+- Skip fault paths (failures will go unnoticed)
+- Create deeply nested subflows (more than 3 levels becomes hard to debug)
+- Pass sensitive data in variable names (visible in logs)
+- Assume subflow will succeed without error handling
 
 ---
 
 ## Fault Paths & Error Recovery
 
-Every subflow call should have a fault path:
+Every subflow call must have a fault path:
 
 ```xml
 <actionCall type="subflow">
@@ -185,31 +265,24 @@ Every subflow call should have a fault path:
   </faultPath>
 </actionCall>
 
-<!-- Error handler -->
 <actionCall type="sendEmail">
   <label>HandleError</label>
   <inputParameters>
-    <subject>Flow Error: {!$Flow.FaultMessage}</subject>
+    <subject>Flow Error in AccountUpdate: {!$Flow.FaultMessage}</subject>
     <body>Error details: {!$Flow.FaultMessage}</body>
     <recipientList>admin@company.com</recipientList>
   </inputParameters>
 </actionCall>
 ```
 
-**Fault Variables** (always available):
+**Available fault variables**:
 - `{!$Flow.FaultMessage}` — Error message
-- `{!$Flow.FaultStack}` — Stack trace (if available)
+- `{!$Flow.FaultStack}` — Stack trace
 
-### Retry Pattern with Fault Paths
-
-```
-Try subflow:
-- If succeeds → Continue
-- If fails → Save error log + Send email to admin
-- Admin manually retries or investigates
-```
-
-Don't auto-retry in flows. Let admins decide. Use Queueable for auto-retry.
+**Error recovery strategies**:
+1. **Log and notify**: Record error in a custom log object, email admin
+2. **Manual retry**: Admin reviews error and manually retries
+3. **Don't auto-retry in flows**: Use Queueable for auto-retry patterns (exponential backoff, etc.)
 
 ---
 
@@ -223,177 +296,219 @@ Flows can subscribe to Platform Events:
     <eventName>Custom_Event__e</eventName>
   </trigger>
   
-  <!-- Event-triggered flow runs here -->
+  <!-- Event-triggered flow -->
   <actionCall type="updateRecord">
-    <label>Update Account</label>
+    <label>Update Account Status</label>
   </actionCall>
 </flow:definition>
 ```
 
-**Constraint**: Runs asynchronously. Not tied to original transaction.
+**Key property**: Runs asynchronously. Not part of the original triggering transaction.
 
-**Use for**: Decoupled event-driven updates (account updated → event published → separate flow updates related records).
+**Use for**: Decoupled event-driven workflows (Account updated → Platform Event published → separate flow processes the event).
 
 ---
 
 ## Flow Orchestrator Patterns
 
-Flow Orchestrator orchestrates multiple flows:
+Flow Orchestrator chains multiple flows into stages:
 
 ```
-Flow Orchestrator:
-├── Start
-├── Stage 1: Approval Flow
-├── Stage 2: Record Creation Flow
-├── Stage 3: Notification Flow
+Orchestrator Flow:
+├── Stage 1: Approval Flow (sequential)
+├── Stage 2: Record Creation Flow (sequential)
+├── Stage 3: Notification Flow (sequential)
 └── End
 ```
 
-**Key Points**:
-- Stages run sequentially (or in parallel if configured)
+**Key characteristics**:
+- Stages run sequentially (or parallel if configured)
 - State persists between stages
-- Orchestrator tracks which stage completed
+- Tracks which stage completed
 - Good for multi-phase workflows (approval → creation → notification)
 
 ---
 
-## Performance Limits & Gotchas
+## From Apex Perspective: Invoking Flows
 
-### Governor Limits in Flows
+Apex can invoke autolaunched flows:
 
-| Limit | Value |
-|-------|-------|
-| SOQL queries per flow | 100 |
-| Records returned per query | 50,000 |
-| Loop iterations | 10,000 |
-| Time limit | 10 minutes |
-| Decision depth | No hard limit, but performance degrades |
+```apex
+// Simple invocation
+Map<String, Object> inputs = new Map<String, Object>();
+inputs.put('accountId', acc.Id);
+inputs.put('year', 2024);
 
-### Gotcha 1: Loop Hitting Limit
+Flow.Interview.CalculateSpendFlow interview = 
+  new Flow.Interview.CalculateSpendFlow(inputs);
+interview.start();
 
-```
-❌ Wrong:
-Loop through Accounts (1,000 items)
-  → Inside loop, update Opportunities (1,000 updates in the loop)
-  → Hit DML limit (10,000 records per transaction)
-
-✅ Right:
-Loop once, collect IDs
-Query Opportunities in bulk
-Update all in one step (outside loop)
+// Get output variables
+Object totalSpend = interview.getVariableValue('totalSpend');
 ```
 
-### Gotcha 2: SOQL in Loops
+**Pattern**: Use for cross-component orchestration (Apex trigger calls flow, flow updates records, returns status to Apex).
 
+---
+
+## From LWC Perspective: Flow Visibility & Async Behavior
+
+**Sync Flow Types (Screen Flow)**
+- LWC can invoke screen flows directly (modal/frame)
+- User sees flow UI in real time
+- Flow waits for user input (synchronous from user perspective)
+
+**Async Flow Types (Record-Triggered, Scheduled, Platform Event)**
+- LWC cannot see when flow runs
+- Record-triggered flows run AFTER triggering transaction completes
+- Changes made by async flows are not visible to LWC wire adapters until LWC refreshes
+
+**Pattern**: When LWC triggers an update that fires a record-triggered flow:
+
+```javascript
+import { LightningElement, wire } from 'lwc';
+import { getRecord } from 'lightning/uiRecordApi';
+
+export default class AccountDetail extends LightningElement {
+  @wire(getRecord, { recordId: this.accountId, fields: ACCOUNT_FIELDS })
+  account;
+
+  handleSave() {
+    // LWC saves record → record-triggered flow runs ASYNCHRONOUSLY
+    // Flow updates fields on the record
+    // But LWC's @wire cache still shows old data
+    this.saveRecord();
+    
+    // Option 1: Force refresh immediately after save
+    return refreshApex(this.account);
+    
+    // Option 2: Wait 2-3 seconds for flow to finish, then refresh
+    // (Not reliable; use refreshApex instead)
+  }
+}
 ```
+
+**Key behaviors**:
+- LWC `@wire(getRecord)` does NOT auto-refresh when record-triggered flow updates the record
+- You must call `refreshApex()` or make a new imperative fetch
+- Screen flows show changes in real time (user waits for flow to finish)
+- Async flows complete in background (LWC doesn't know when they finish)
+
+---
+
+## Common Mistakes & Fixes
+
+### Mistake 1: SOQL in Loops
+
+```xml
 ❌ Wrong:
 Loop through 100 Accounts:
-  Query Opportunities WHERE AccountId = this account
-  (100 queries hit limit)
+  → Query Opportunities WHERE AccountId = this account
+  → (100 SOQL queries hit limit)
 
 ✅ Right:
-Query Opportunities WHERE AccountId IN all account IDs (1 query)
+Query ALL Opportunities WHERE AccountId IN {all account IDs}
+→ (1 SOQL query)
 Loop and process in memory
 ```
 
-### Gotcha 3: Missing Variable Initialization
+### Mistake 2: Infinite Recursion
 
+```xml
+❌ Wrong:
+Record-Triggered Flow on Account:
+  → Updates Account.Status
+  → Flow triggers again (infinite loop)
+
+✅ Right:
+Set recursion guard flag FIRST
+Check if guard is set → If yes, exit
+Proceed with logic
 ```
+
+### Mistake 3: Missing Variable Initialization
+
+```xml
 ❌ Wrong:
 Decision: Is totalAmount > 100?
 (totalAmount is null, decision fails)
 
 ✅ Right:
 Initialize totalAmount = 0
-Loop through records
-Update totalAmount
+Loop and accumulate
 Then decision
 ```
 
----
-
-## Common Mistakes & Fixes
-
-### Mistake 1: Infinite Loop with Recursion
-
-**Problem**: Flow updates record → Record-triggered flow runs → Updates record again → Loop
-
-**Fix**:
-1. Add `Processed__c` checkbox field
-2. In flow: Decision "Is Processed__c true?" → If yes, exit
-3. Set `Processed__c = true` at start
-4. Set `Processed__c = false` when done (if not marking as processed permanently)
-
-### Mistake 2: Missing Fault Paths
-
-**Problem**: Subflow fails silently. No error logged.
-
-**Fix**: Always add fault paths. Log errors.
+### Mistake 4: Assuming Record Exists
 
 ```xml
-<actionCall type="subflow">
-  <faultPath>
-    <connector>LogError</connector>
-  </faultPath>
-</actionCall>
+❌ Wrong:
+Record-Triggered Flow expects record exists
+→ But delete or filter might happen first
+→ Record is null, updates fail silently
+
+✅ Right:
+Decision: Is Record null?
+→ If null, exit
+→ If not null, proceed
 ```
 
-### Mistake 3: Assuming Record Exists
+### Mistake 5: Time-Based Delays as Real-Time Updates
 
-**Problem**: Record-triggered flow expects record exists, but deletes or filters might run first.
+```xml
+❌ Wrong:
+Use Scheduled Flow for "near-real-time" updates
+→ Not reliable, user waits, flow runs 5 minutes later
 
-**Fix**: Always check if record exists before updating.
-
-### Mistake 4: Variable Name Typos
-
-**Problem**: Decision references `{!totalSpend}` but variable is `{!total_Spend}` (underscore).
-
-**Fix**: Use copy-paste for variable names. Double-check declarations.
-
-### Mistake 5: Time-Based Delays
-
-**Problem**: Using a scheduled flow for near-real-time updates (not reliable).
-
-**Fix**: Use record-triggered flow or Queueable for immediate updates.
+✅ Right:
+Use Record-Triggered Flow for immediate updates
+Use Scheduled Flow only for batch overnight jobs
+```
 
 ---
 
 ## Testing Flows
 
-### Manual Testing
+### Manual Test Checklist
 
-1. **Test happy path**: Insert/update record with valid data
-2. **Test edge cases**: Null values, empty lists, division by zero
-3. **Test fault paths**: Deliberately fail subflows to verify error handling
-4. **Test subflow isolation**: Test subflow separately before testing parent flow
+1. **Happy path**: Insert/update record with valid data, verify expected result
+2. **Edge cases**: Null values, empty collections, boundary values
+3. **Fault paths**: Deliberately fail a subflow, verify error handling
+4. **Subflow isolation**: Test subflow separately first
+5. **Bulk scenarios**: Insert 200+ records, verify flow handles volume
 
-### Assertion Patterns
+### Assertion Pattern
 
-- Query records after flow runs
-- Assert field values match expected outcome
-- Assert related records created/updated
-
-### Bulk Testing
-
-```
-1. Bulk insert 200 accounts
+```xml
+Test:
+1. Bulk insert 200 Accounts
 2. Record-triggered flow fires 200 times (parallel)
-3. Assert all related opportunities updated
+3. Query to verify all related Opportunities updated
 4. Assert no SOQL/DML limit errors
+5. Assert all Opportunity fields have expected values
 ```
+
+### Common Test Issues
+
+- **Problem**: Bulk test inserts 200 records, flow expects single record
+- **Fix**: Loop inside flow or design flow to handle collections
+
+- **Problem**: Manual test works, bulk test fails
+- **Fix**: Record-triggered flows run in parallel; use bulk testing to catch concurrency issues
 
 ---
 
-## Checklist: Flow Ready for Production
+## Production Readiness Checklist
 
 - ✅ All subflows have fault paths
-- ✅ Fault paths log errors
-- ✅ No infinite recursion (guard flag in place)
-- ✅ Bulk tested (200+ records)
+- ✅ Fault paths log errors (send email, or create log record)
+- ✅ Recursion guard in place (if flow updates triggering record)
+- ✅ Bulk tested with 200+ records
 - ✅ SOQL queries counted (< 100 per flow)
-- ✅ Variable names checked for typos
+- ✅ DML operations counted (< 10,000 per flow)
+- ✅ No queries inside loops (batch query, then loop)
+- ✅ Variable names verified (no typos in references)
 - ✅ Decision logic handles null values
 - ✅ Output variables named clearly
-- ✅ No time-based delays (rely on record-triggered)
-- ✅ Error handling in place (emails to admin on failure)
-
+- ✅ No reliance on time-based delays for critical workflows
+- ✅ Cross-component integration tested (if Apex invokes flow or flow invokes Apex action)

@@ -1,245 +1,363 @@
-# Permission Model Design
+# Permission Model
 
-Designing Permission Sets, Custom Permissions, and feature access control for Salesforce orgs.
+The permission model controls who sees and accesses what in Salesforce. It applies across Apex, Flow, and LWC.
+
+## Permission Model Hierarchy
+
+```mermaid
+flowchart TD
+    A["User Record Access"] --> B["1. Org-Wide Defaults<br/>OWD"]
+    B --> C["2. Role Hierarchy<br/>Can See Subordinates"]
+    C --> D["3. Sharing Rules<br/>Manual or Criteria-Based"]
+    D --> E["4. Manual Sharing<br/>*Share Objects"]
+    E --> F["User Can See Record"]
+    
+    F --> G["Field Access"] --> H["5. Field Permissions<br/>fieldPermissions in PS"]
+    H --> I["User Can Access Field"]
+```
+
+Each layer is cumulative: user must pass OWD, then role hierarchy, then sharing, then field permissions.
 
 ---
 
-## Permission Sets vs. Profiles
+## Org-Wide Defaults (OWD)
 
-### Profiles (Legacy)
+OWD sets the baseline sharing level. It's the first gate.
 
-A profile is a mandatory, hard-to-change role for every user.
+| OWD Setting | Who Can See | Who Can Edit | Use Case |
+|---|---|---|---|
+| Public Read/Write | Everyone | Everyone | Open records, no privacy |
+| Public Read Only | Everyone | Owner | Everyone sees, owner edits |
+| Private | Owner only | Owner | Most restrictive, sharing required |
+| Controlled by Parent | Inherits from parent | Inherits from parent | Child records follow parent |
 
-- Each user has exactly one profile
-- Includes login hours, IP restrictions, record types, field permissions
-- Changes to a profile affect all users with that profile
-- Hard to test (can't assign multiple profiles to test edge cases)
-
-**Avoid for new features.** Use Permission Sets instead.
-
-### Permission Sets (Modern)
-
-Permission Sets are layered on top of a profile. A user can have multiple Permission Sets.
-
-- User has 1 Profile + 0 to many Permission Sets
-- Easy to test (assign/remove on demand)
-- Granular control (can give one user a feature without changing their profile)
-- Changes affect only assigned users
-
-**Use Permission Sets for all new features.**
+**Best practice**: Set OWD to Private as default. Grant access via sharing rules and permissions.
 
 ---
 
-## Building a Permission Set for a Feature
+## Permission Sets
 
-### Step 1: Identify What the User Needs
+Permission Sets grant permissions to users. Multiple PermissionSets stack on the same user.
 
-A feature might require:
-- Access to custom objects (Create, Read, Update, Delete)
-- Field-level access (read, edit)
-- Custom permissions
-- Tab visibility
-- Apex class access
-- Page/Component access
-- Custom settings access
+### Components Controlled by PermissionSet
 
-### Step 2: Create the Permission Set
+| Component | Example |
+|-----------|---------|
+| Object Permissions | Create, Read, Update, Delete Account |
+| Field Permissions | Read/Edit CustomField__c |
+| Custom Permissions | Can_Export_Data |
+| Apex Classes | AccountService, DataProcessor |
+| Lightning Components | Lightning Web Components, Aura |
+| Custom Metadata | Configuration records |
+| Tab Visibility | Account, Contact, Custom Tabs |
 
-Setup > Users > Permission Sets → New
+### Creating a PermissionSet
 
-```
-Name: Opportunity_Manager
-Description: Allows management of opportunities and related data
-License: No License (admin use) OR Standard User (for feature)
-```
+1. Setup > Users > Permission Sets
+2. New > PermissionSet
+3. **Label**: `Account_Admin`
+4. **Name**: `Account_Admin`
+5. Save
+6. In the PermissionSet, add:
+   - **Object Permissions**: Account (Create, Read, Update, Delete)
+   - **Field Permissions**: For each custom field (Create, Read, Update checkboxes)
+   - **Custom Permissions**: Add custom permissions
+   - **Apex Classes**: Add classes this role can execute
+   - **Custom Metadata Types**: Add metadata types
+   - **Tabs**: Set visibility (Default On, Default Off, Hidden)
 
-### Step 3: Add Permissions
+### Critical: fieldPermissions for Custom Fields
 
-#### Object Permissions
-
-Setup > Permission Sets > [PermissionSet] > Object Settings
-
-| Object | Create | Read | Update | Delete |
-|--------|--------|------|--------|--------|
-| Account | ✓ | ✓ | ✓ | ✗ |
-| Opportunity | ✓ | ✓ | ✓ | ✓ |
-| OpportunityLineItem | ✗ | ✓ | ✗ | ✗ |
-
-#### Field Permissions
-
-Setup > Permission Sets > [PermissionSet] > Field Permissions
-
-For each custom field, grant Read and/or Edit access.
-
-**Important Rule**: If a field is required (required=true in metadata), do NOT include it in fieldPermissions. Salesforce throws an error if you try to assign fieldPermissions for required fields.
+Every custom field requires a fieldPermissions entry in the PermissionSet OR the user cannot access it.
 
 ```xml
-<!-- CORRECT: Required fields not in fieldPermissions -->
+<!-- PermissionSet metadata: fieldPermissions for custom field -->
 <fieldPermissions>
-  <editable>true</editable>
-  <field>Opportunity.CustomField__c</field>
-  <readable>true</readable>
-</fieldPermissions>
-<!-- Required field, skip it -->
-
-<!-- WRONG: Including required field -->
-<fieldPermissions>
-  <editable>true</editable>
-  <field>Opportunity.StageName</field>  <!-- Required, will error -->
-  <readable>true</readable>
-</fieldPermissions>
-```
-
-#### Tab Settings
-
-Setup > Permission Sets > [PermissionSet] > Tab Settings
-
-| Tab | Visibility |
-|-----|------------|
-| Opportunities | Available |
-| Custom Tab | Available |
-
-Enum values: Available, Hidden, None
-
-#### Custom Permissions
-
-Setup > Permission Sets > [PermissionSet] > Custom Permissions
-
-| Permission | Enabled |
-|------------|---------|
-| Can_Approve_Deals | ✓ |
-| Can_Export_Data | ✗ |
-
-#### Apex Class Access
-
-Setup > Permission Sets > [PermissionSet] > Apex Class Access
-
-| Class | Enabled |
-|-------|---------|
-| OpportunityApprovalService | ✓ |
-| ReportService | ✓ |
-
----
-
-## Permission Set XML Structure
-
-A Permission Set is deployed as XML.
-
-```xml
-<?xml version="1.0" encoding="UTF-8"?>
-<PermissionSet xmlns="http://soap.sforce.com/2006/04/metadata">
-  <description>Allows management of opportunities</description>
-  <label>Opportunity_Manager</label>
-  
-  <!-- Object permissions -->
-  <objectPermissions>
-    <allowCreate>true</allowCreate>
-    <allowDelete>true</allowDelete>
-    <allowEdit>true</allowEdit>
-    <allowRead>true</allowRead>
-    <modifyAllRecords>false</modifyAllRecords>
-    <object>Opportunity</object>
-    <viewAllRecords>false</viewAllRecords>
-  </objectPermissions>
-  
-  <!-- Field permissions (non-required fields only) -->
-  <fieldPermissions>
-    <editable>true</editable>
-    <field>Opportunity.CustomField__c</field>
+    <enabled>true</enabled>
+    <field>Account.CustomField__c</field>
     <readable>true</readable>
-  </fieldPermissions>
-  
-  <!-- Tab visibility -->
-  <tabSettings>
-    <tab>Opportunity_Custom_App</tab>
-    <visibility>Available</visibility>
-  </tabSettings>
-  
-  <!-- Apex class access -->
-  <classAccesses>
-    <apexClass>OpportunityApprovalService</apexClass>
-    <enabled>true</enabled>
-  </classAccesses>
-  
-  <!-- Custom permission -->
-  <customPermissions>
-    <enabled>true</enabled>
-    <name>Can_Approve_Deals</name>
-  </customPermissions>
-</PermissionSet>
+    <editable>true</editable>
+</fieldPermissions>
+```
+
+**If missing**:
+- WITH USER_MODE throws error: "No such column"
+- Security.stripInaccessible() silently strips the field
+- User cannot access the field
+
+### Assigning PermissionSet to User
+
+```apex
+PermissionSetAssignment psa = new PermissionSetAssignment(
+  PermissionSetId = [SELECT Id FROM PermissionSet WHERE Name = 'Account_Admin' LIMIT 1].Id,
+  AssigneeId = userId
+);
+insert psa;
 ```
 
 ---
 
-## Testing Permission Models
+## Custom Permissions
 
-### Pattern: Test with Limited User
+Custom Permissions are flags you define and check in code.
+
+### Create a Custom Permission
+
+1. Setup > Custom Code > Custom Permissions
+2. New > Label: `Can_Export_Data`, Name: `Can_Export_Data`
+3. Save
+4. Assign to PermissionSet: Edit PermissionSet > Custom Permissions > Add
+
+### Using in Apex
+
+```apex
+public with sharing class DataExportService {
+  public static String exportAccounts() {
+    if (!FeatureManagement.checkPermission('Can_Export_Data')) {
+      throw new SecurityException('You lack permission to export');
+    }
+    
+    List<Account> accounts = [SELECT Id, Name FROM Account WITH SECURITY_ENFORCED];
+    
+    String csv = 'Id,Name\n';
+    for (Account acc : accounts) {
+      csv += acc.Id + ',' + acc.Name + '\n';
+    }
+    return csv;
+  }
+}
+```
+
+### Using in LWC
+
+```javascript
+import checkPermission from '@salesforce/apex/PermissionService.checkPermission';
+
+export default class DataExport extends LightningElement {
+  async handleExport() {
+    const hasPermission = await checkPermission('Can_Export_Data');
+    if (!hasPermission) {
+      this.dispatchEvent(
+        new ShowToastEvent({
+          message: 'You lack permission to export',
+          variant: 'error'
+        })
+      );
+      return;
+    }
+  }
+}
+```
+
+---
+
+## Sharing Rules
+
+Sharing Rules grant access to records based on criteria or group membership.
+
+### Criteria-Based Sharing Rule
+
+Setup > Sharing Settings > [Object] > Manage > New Sharing Rule
+
+**Example**: "All Sales team members see Accounts in California"
+
+```apex
+// In Apex (if setting up programmatically):
+List<AccountShare> shares = new List<AccountShare>();
+
+// Find all CA accounts
+List<Account> caAccounts = [SELECT Id FROM Account WHERE BillingState = 'CA'];
+
+// Share with each sales member
+for (Account acc : caAccounts) {
+  for (User salesMember : [SELECT Id FROM User WHERE Department = 'Sales']) {
+    AccountShare share = new AccountShare();
+    share.AccountId = acc.Id;
+    share.UserOrGroupId = salesMember.Id;
+    share.AccountAccessLevel = 'Read';  // Read, Edit, or All
+    shares.add(share);
+  }
+}
+
+insert shares;
+```
+
+### Group-Based Sharing Rule
+
+Setup > Manage Public Groups → Create group with users
+
+Then share with the group:
+
+```apex
+public class GrantAccessToGroup {
+  public static void shareAccountWithGroup(Id accountId) {
+    Group financeGroup = [SELECT Id FROM Group WHERE Name = 'Finance Team' LIMIT 1];
+    
+    AccountShare share = new AccountShare();
+    share.AccountId = accountId;
+    share.UserOrGroupId = financeGroup.Id;  // Can be User or Group
+    share.AccountAccessLevel = 'Edit';
+    insert share;
+  }
+}
+```
+
+---
+
+## Role Hierarchy
+
+Role Hierarchy grants access to subordinates' records. Higher roles see all records below them.
+
+```
+CEO
+├── VP Sales
+│   ├── Sales Manager 1
+│   │   ├── Sales Rep 1
+│   │   └── Sales Rep 2
+│   └── Sales Manager 2
+└── VP Finance
+    ├── Controller
+    └── Accountant
+```
+
+**Effect**: VP Sales sees all Accounts owned by Sales Managers and Reps. She cannot see Finance team's records.
+
+Set in Setup > Users > Manage Roles.
+
+---
+
+## Flow Security
+
+Flows inherit user context depending on flow type.
+
+### Record-Triggered Flow
+
+- **Context**: Runs as system user (ignores OWD)
+- **FLS**: Enforced
+- **Access**: Can see all records triggering the flow, but FLS strips inaccessible fields
+
+### Screen Flow
+
+- **Context**: Runs as logged-in user (OWD enforced)
+- **FLS**: Enforced
+- **Access**: User sees only records they have access to
+
+### Scheduled Flow
+
+- **Context**: Runs as system user (ignores OWD)
+- **FLS**: Enforced
+- **Access**: Can access all records, but FLS enforced on fields
+
+### Autolaunched Flow
+
+- **Context**: Runs as system user (ignores OWD)
+- **FLS**: Enforced
+- **Access**: Called from Apex or API, can access all records
+
+### Controlling Flow Visibility
+
+1. **Permission Set**: Add flow to PermissionSet > Lightning Flows
+2. **Custom Permission**: Grant only to users with specific permission
+3. **Flow Access**: Add to PermissionSet and assign to roles
+
+---
+
+## LWC Security
+
+LWC doesn't have direct visibility permissions. All security is enforced via the Apex controller.
+
+```javascript
+// LWC: AccountList.js
+import getAccounts from '@salesforce/apex/AccountController.getAccounts';
+
+export default class AccountList extends LightningElement {
+  @wire(getAccounts)
+  wiredAccounts({ data, error }) {
+    this.accounts = data;
+  }
+}
+```
+
+```apex
+// Apex Controller: enforces all security
+public with sharing class AccountController {
+  @AuraEnabled(cacheable=true)
+  public static List<Account> getAccounts() {
+    // with sharing: respects OWD and user permissions
+    // WITH SECURITY_ENFORCED: enforces CRUD
+    // stripInaccessible: enforces FLS
+    return [SELECT Id, Name FROM Account WITH SECURITY_ENFORCED];
+  }
+}
+```
+
+**LWC sees only what Apex returns**. If Apex enforces security, LWC is secure.
+
+---
+
+## Permission Testing with System.runAs
+
+Always test services with a limited user, not System Admin.
 
 ```apex
 @IsTest
-private class OpportunityPermissionTest {
+private class PermissionTest {
   @TestSetup
   static void setupUsers() {
-    // Create standard user
     User limitedUser = new User(
       FirstName = 'Limited',
       LastName = 'User',
       Email = 'limited@example.com',
       Username = 'limited@example.com.' + System.now().millisecond(),
       ProfileId = [SELECT Id FROM Profile WHERE Name = 'Standard User' LIMIT 1].Id,
-      Alias = 'lim1',
+      Alias = 'lim',
       TimeZoneSidKey = 'America/Los_Angeles',
       LocaleSidKey = 'en_US',
       EmailEncodingKey = 'UTF-8',
       LanguageLocaleKey = 'en_US'
     );
     insert limitedUser;
-  }
-  
-  @IsTest
-  static void testOpportunityManagerPermissions() {
-    User limitedUser = [SELECT Id FROM User WHERE Email = 'limited@example.com' LIMIT 1];
     
     // Assign permission set
     PermissionSetAssignment psa = new PermissionSetAssignment(
-      PermissionSetId = [SELECT Id FROM PermissionSet WHERE Name = 'Opportunity_Manager'].Id,
+      PermissionSetId = [SELECT Id FROM PermissionSet WHERE Name = 'Account_Admin' LIMIT 1].Id,
       AssigneeId = limitedUser.Id
     );
     insert psa;
+  }
+  
+  @IsTest
+  static void testAccessWithPermissionSet() {
+    User limitedUser = [SELECT Id FROM User WHERE Email = 'limited@example.com' LIMIT 1];
     
-    // Test as limited user
     System.runAs(limitedUser) {
-      // Should be able to create opportunity
-      Opportunity opp = new Opportunity(Name = 'Test Deal', StageName = 'Prospecting', CloseDate = Date.today());
-      insert opp;
-      
-      // Should be able to read
-      Opportunity retrieved = [SELECT Id FROM Opportunity WHERE Id = :opp.Id];
-      System.assert(retrieved != null);
-      
-      // Should be able to update
-      retrieved.Name = 'Updated Deal';
-      update retrieved;
-      
-      // Should be able to delete
-      delete retrieved;
+      // Test as limited user (has Account_Admin PermissionSet)
+      List<Account> accounts = AccountService.getAccounts();
+      System.assertNotEquals(null, accounts);
     }
   }
   
   @IsTest
-  static void testWithoutPermission() {
-    User limitedUser = [SELECT Id FROM User WHERE Email = 'limited@example.com' LIMIT 1];
+  static void testAccessWithoutPermissionSet() {
+    User noPermUser = new User(
+      FirstName = 'No',
+      LastName = 'Perm',
+      Email = 'noperm@example.com',
+      Username = 'noperm@example.com.' + System.now().millisecond(),
+      ProfileId = [SELECT Id FROM Profile WHERE Name = 'Standard User' LIMIT 1].Id,
+      Alias = 'nop',
+      TimeZoneSidKey = 'America/Los_Angeles',
+      LocaleSidKey = 'en_US',
+      EmailEncodingKey = 'UTF-8',
+      LanguageLocaleKey = 'en_US'
+    );
+    insert noPermUser;
     
-    // Don't assign permission set
-    
-    System.runAs(limitedUser) {
-      // Should not be able to create opportunity
-      Opportunity opp = new Opportunity(Name = 'Test Deal', StageName = 'Prospecting', CloseDate = Date.today());
-      
+    System.runAs(noPermUser) {
+      // User has NO Account_Admin PermissionSet
       try {
-        insert opp;
-        System.assert(false, 'Should not have create permission');
-      } catch (DmlException ex) {
+        AccountService.getAccounts();
+      } catch (Exception ex) {
         System.assert(ex.getMessage().contains('INSUFFICIENT_ACCESS'));
       }
     }
@@ -249,215 +367,31 @@ private class OpportunityPermissionTest {
 
 ---
 
-## Custom Permissions
+## Profiles vs. PermissionSets
 
-Custom permissions are Boolean flags you define. Use them to gate access to features.
+| Profiles | PermissionSets |
+|----------|-----------------|
+| Required (every user has exactly one) | Optional (user can have multiple) |
+| Sets baseline permissions | Additive (on top of profile) |
+| Hard to maintain | Easy to maintain and test |
+| Changes affect all users with that profile | Changes affect only assigned users |
 
-### Setup Custom Permission
-
-Setup > Custom Code > Custom Permissions → New
-
-```
-Label: Can Approve Deals
-Name: Can_Approve_Deals
-Description: Controls access to deal approval feature
-```
-
-### Assign to Permission Set
-
-Setup > Permission Sets > [PermissionSet] > Custom Permissions
-
-Check "Can_Approve_Deals".
-
-### Check in Apex
-
-```apex
-public class DealApprovalService {
-  public static void approveDeal(Id dealId) {
-    // Check permission
-    if (!FeatureManagement.checkPermission('Can_Approve_Deals')) {
-      throw new SecurityException('You do not have permission to approve deals');
-    }
-    
-    // Process approval
-    Deal__c deal = [SELECT Id FROM Deal__c WHERE Id = :dealId];
-    deal.Status__c = 'Approved';
-    update deal;
-  }
-}
-```
+**Modern approach**: Use a basic profile (Standard User, Custom) + PermissionSets for features.
 
 ---
 
-## Role Hierarchy
+## Production Readiness Checklist
 
-Role hierarchy controls data visibility in reports and list views (not CRUD).
-
-Setup > Users > Roles
-
-Create hierarchy:
-
-```
-CEO
-├── VP Sales
-│  ├── Sales Manager 1
-│  │  ├── Sales Rep 1
-│  │  └── Sales Rep 2
-│  └── Sales Manager 2
-└── VP Operations
-   ├── Finance Manager
-   └── Analyst
-```
-
-**Impact**: Users can see records owned by their subordinates in reports.
-
-**Does NOT control**: Who can create/edit records. Use OWD and Sharing Rules for that.
-
----
-
-## Org-Wide Defaults (OWD)
-
-OWD sets the baseline sharing level for records.
-
-Setup > Feature Settings > Sharing Settings
-
-| Object | Setting |
-|--------|---------|
-| Account | Private |
-| Opportunity | Controlled by Parent (Account) |
-| Task | Public Read/Write |
-
-### Sharing Rules
-
-If OWD is Private, use Sharing Rules to grant access.
-
-Setup > Feature Settings > Sharing Settings → [Object] Sharing Rules
-
-```
-Rule Name: Sales Managers View All Accounts
-User: Sales Manager role
-Account Access Level: Read Only
-```
-
-When a sales manager views a report, they see:
-- Accounts they own
-- Accounts owned by their subordinates (role hierarchy)
-- Accounts explicitly shared with them (sharing rules)
-
----
-
-## Permission Set Group
-
-Permission Set Groups bundle multiple Permission Sets.
-
-Setup > Users > Permission Set Groups → New
-
-```
-Name: Opportunity_Manager_Suite
-Permission Sets to include:
-  - Opportunity_Manager
-  - Reports_Access
-  - Dashboard_Access
-```
-
-Assign group to users. All bundled Permission Sets grant access.
-
----
-
-## Common Mistakes
-
-### Mistake 1: Not Checking Permissions in Code
-
-```apex
-// ❌ Wrong (no permission check)
-public static void approveDeal(Id dealId) {
-  Deal__c deal = [SELECT Id FROM Deal__c WHERE Id = :dealId];
-  deal.Status__c = 'Approved';
-  update deal;
-}
-
-// ✅ Right (checks permission)
-public static void approveDeal(Id dealId) {
-  if (!FeatureManagement.checkPermission('Can_Approve_Deals')) {
-    throw new SecurityException('No permission');
-  }
-  
-  Deal__c deal = [SELECT Id FROM Deal__c WHERE Id = :dealId];
-  deal.Status__c = 'Approved';
-  update deal;
-}
-```
-
-### Mistake 2: Including Required Fields in fieldPermissions
-
-```xml
-<!-- ❌ Wrong (StageName is required) -->
-<fieldPermissions>
-  <field>Opportunity.StageName</field>
-  <editable>true</editable>
-  <readable>true</readable>
-</fieldPermissions>
-
-<!-- ✅ Right (omit required fields) -->
-<fieldPermissions>
-  <field>Opportunity.CustomField__c</field>
-  <editable>true</editable>
-  <readable>true</readable>
-</fieldPermissions>
-```
-
-### Mistake 3: Not Testing with Limited User
-
-```apex
-// ❌ Wrong (tests as admin, no permission issues caught)
-@IsTest
-static void testDealApproval() {
-  Opportunity opp = new Opportunity(...);
-  insert opp;
-  DealApprovalService.approveDeal(opp.Id);  // Runs as admin
-}
-
-// ✅ Right (tests with limited user)
-@IsTest
-static void testDealApproval() {
-  User limitedUser = [SELECT Id FROM User WHERE Email = 'limited@example.com'];
-  
-  System.runAs(limitedUser) {
-    try {
-      DealApprovalService.approveDeal(opportunityId);
-      System.assert(false, 'Should fail without permission');
-    } catch (SecurityException ex) {
-      // Expected
-    }
-  }
-}
-```
-
-### Mistake 4: Over-Permissioning
-
-```apex
-// ❌ Wrong (giving admin permission to everyone)
-Profile: Standard User
-PermissionSet: Can_Do_Everything  // Too broad
-
-// ✅ Right (minimal permissions)
-Profile: Standard User
-PermissionSet: Opportunity_Editor  // Only what's needed
-```
-
----
-
-## Checklist: Permission Model Ready for Production
-
-- ✅ All custom objects have Permission Sets (not Profile-based)
-- ✅ Custom fields have fieldPermissions (except required fields)
-- ✅ Object permissions set (Create, Read, Update, Delete)
-- ✅ Custom permissions for sensitive operations
-- ✅ Permission checks in code (FeatureManagement.checkPermission)
-- ✅ Tested with limited users (System.runAs)
-- ✅ Role hierarchy in place (if needed)
-- ✅ Org-Wide Defaults configured
-- ✅ Sharing Rules in place (if OWD is Private)
-- ✅ No hardcoded permission assumptions in code
-- ✅ Documentation of who needs what access
-
+- ✅ OWD set to Private for sensitive objects (share via rules)
+- ✅ Role Hierarchy configured (access delegation)
+- ✅ PermissionSets created and assigned (not Profiles for features)
+- ✅ fieldPermissions include all custom fields (no FLS violations)
+- ✅ Custom Permissions defined for sensitive operations
+- ✅ Sharing Rules configured (criteria or group-based)
+- ✅ Apex services use `with sharing` by default
+- ✅ Tests run as non-admin (System.runAs with PermissionSet)
+- ✅ Flow FLS enforced (even in system-context flows)
+- ✅ LWC controllers enforce security (WITH SECURITY_ENFORCED, stripInaccessible)
+- ✅ Manual shares tested (AccountShare, ContactShare, etc.)
+- ✅ Role Hierarchy does not grant unnecessary access
+- ✅ Tab visibility set correctly (Available/None in PermissionSet)

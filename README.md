@@ -88,6 +88,55 @@ That's what this project does. One less round-trip. Fewer surprises in productio
 
 ## What's Here
 
+### Salesforce Development Ecosystem
+
+```mermaid
+graph TD
+    A["Salesforce Platform"] --> B["Execution Layer"]
+    A --> C["Data Layer"]
+    A --> D["UI Layer"]
+    
+    B --> B1["Triggers & Apex"]
+    B --> B2["Flows & Automation"]
+    B --> B3["Batch & Async"]
+    
+    C --> C1["SOQL & Database"]
+    C --> C2["Security & FLS"]
+    C --> C3["Sharing & Access"]
+    
+    D --> D1["LWC Components"]
+    D --> D2["Lightning Pages"]
+    D --> D3["Screen Flows"]
+    
+    B1 --> E["Order of Execution"]
+    B2 --> E
+    B3 --> E
+    
+    C1 --> F["Testing & Validation"]
+    C2 --> F
+    C3 --> F
+    
+    D1 --> F
+    D2 --> F
+    D3 --> F
+    
+    E --> G["Deployment"]
+    F --> G
+    
+    G --> H["Production"]
+    
+    style A fill:#e3f2fd
+    style B fill:#f3e5f5
+    style C fill:#fff3e0
+    style D fill:#e8f5e9
+    style E fill:#fce4ec
+    style F fill:#f1f8e9
+    style G fill:#ede7f6
+    style H fill:#c8e6c9
+```
+
+**Navigation**: Start with your role above → Read core concepts → Reference guides as needed → See templates for CLAUDE.md
+
 ### Core Documentation
 
 | File | What It Covers |
