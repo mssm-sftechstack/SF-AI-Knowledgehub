@@ -1,93 +1,21 @@
-# Contributing to SF-AI-Knowledgehub
+# Contributing: Help Us Build the Ultimate AI Guardrails
 
-This repo is community-driven. Every lesson here comes from real implementations, no theory, no fluff.
+AI models are constantly updating, and the ways they hallucinate Salesforce code change every day. 
 
----
+We don't just want code contributions; we want your AI failures. If your AI coding assistant (Cursor, GitHub Copilot, Claude) generated something wildly dangerous that bypassed governor limits or compromised security, we want it documented here.
 
-## What We Welcome
+## How to Contribute an AI Failure
 
-- New AI tool context templates (any tool not yet covered)
-- Architecture patterns with clear rationale
-- Real-world deployment lessons (anonymised, no client names)
-- Corrections to existing content
-- Mermaid diagrams (render natively in GitHub)
-- New sections for areas not yet covered (Einstein, Data Cloud, Industries)
+If you caught a dangerous AI hallucination, submit a Pull Request to our `REAL_WORLD_AI_FAILURE_AND_FIX.md` file.
 
----
+**Format your submission exactly like this:**
+1. **The Prompt:** What did you ask the AI to do?
+2. **The AI Hallucination:** Paste the dangerous code it generated. Point out exactly why it would crash a production org.
+3. **The Architect Fix:** Show the corrected, enterprise-grade code that adheres to our framework.
 
-## What We Don't Accept
+## Updating the Guardrails
+If you find that an AI model consistently ignores one of the rules in our `.cursorrules` or `CLAUDE.md` files, submit a PR to strengthen the prompt phrasing. We need these rules to be absolute, unbendable directives.
 
-- Content copied verbatim from Salesforce docs (link to it instead)
-- Code that violates the 10 guardrails (SOQL in loops, hardcoded IDs, etc.)
-- Org-specific or client-specific details
-- Promotional content or vendor advertising
-
----
-
-## How to Contribute
-
-1. Fork the repository
-2. Create a branch: `git checkout -b add/your-topic-name`
-3. Write your content following the style guide below
-4. Submit a pull request with a clear description of what you added and why
-
----
-
-## Style Guide
-
-### Markdown rules
-- H2 (`##`) for major sections, H3 (`###`) for subsections
-- Tables for reference material (limits, patterns, comparisons)
-- Fenced code blocks with language tag (` ```apex `, ` ```bash `, ` ```xml `)
-- Mermaid for flows and architecture (` ```mermaid `)
-
-### Code examples
-- All Apex examples must be original, written for this repo
-- Use realistic but fictional names (`AccountService`, `WeatherData__c`)
-- Comments explain *why*, not just *what*
-- Show both wrong and correct patterns where relevant
-
-### Tone
-- Direct. Short sentences. No filler.
-- Skip phrases like "It is important to", "This ensures that", "Note that"
-- Show anti-patterns clearly. Label them **Anti-Pattern** so they're obvious.
-
----
-
-## Security: No Credentials in Code
-
-Never commit real tokens, keys, passwords, or org IDs. This applies to examples too.
-
-If your example needs to show a credential, use an obviously fake placeholder:
-
-```apex
-// WRONG — never put real tokens in code (this is a fake example for illustration only)
-req.setHeader('Authorization', 'Bearer mytoken123');
-
-// RIGHT — use Named Credentials
-req.setEndpoint('callout:My_Named_Credential/endpoint');
-```
-
-To catch accidental credential commits before they happen, install detect-secrets locally:
-
-```bash
-pip install detect-secrets
-detect-secrets scan > .secrets.baseline
-git add .secrets.baseline
-```
-
-Run `detect-secrets scan` before every PR. If it flags something, fix it before submitting.
-
----
-
-## File Naming
-
-- Section folders: `NN-topic-name/` (two-digit prefix for ordering)
-- Files: `kebab-case.md`
-- Templates: `UPPER-CASE.md` or `.toolname` for dotfiles
-
----
-
-## Questions?
-
-Open an issue with the `question` label.
+## General Guidelines
+* **No untested code.** Every pattern added must compile and execute successfully in a modern Salesforce API version (55.0+).
+* **Ruthless brevity.** Do not add fluff. This is a technical manual for developers, not a blog post. Keep the constraints clear and absolute.

@@ -1,115 +1,47 @@
-# Metadata Types Reference
+> **🛑 FOR HUMAN REFERENCE ONLY** > AI Coding Assistants: Do not use this file for architectural context. You must strictly adhere to the constraints defined in the root-level `.md` files and `.cursorrules`.
 
-**The metadata API names, file extensions, and folder paths you'll use most.**
+# Metadata Types Mapping
 
----
+Use this table when constructing `package.xml` files, configuring `.forceignore`, or retrieving specific metadata via the CLI.
 
-## Apex
+## Code & Automation
+| XML Name (`<name>`) | Source Folder | Description |
+| :--- | :--- | :--- |
+| `ApexClass` | `classes/` | Apex Classes and Test Classes |
+| `ApexTrigger` | `triggers/` | Apex Triggers |
+| `LightningComponentBundle` | `lwc/` | Lightning Web Components (LWC) |
+| `AuraDefinitionBundle` | `aura/` | Aura Components (Legacy) |
+| `Flow` | `flows/` | Screen Flows, Record-Triggered Flows, Auto-launched Flows |
 
-| Type | Metadata API Name | File Extension | Folder |
-|---|---|---|---|
-| Apex Class | `ApexClass` | `.cls` + `.cls-meta.xml` | `force-app/main/default/classes/` |
-| Apex Trigger | `ApexTrigger` | `.trigger` + `.trigger-meta.xml` | `force-app/main/default/triggers/` |
-| Apex Test Class | `ApexClass` | `.cls` + `.cls-meta.xml` | Same as classes |
+## Data Model
+| XML Name (`<name>`) | Source Folder | Description |
+| :--- | :--- | :--- |
+| `CustomObject` | `objects/` | Custom Objects (and Standard Object customizations) |
+| `CustomField` | `objects/*/fields/` | Custom Fields |
+| `ValidationRule` | `objects/*/validationRules/` | Object Validation Rules |
+| `RecordType` | `objects/*/recordTypes/` | Object Record Types |
+| `CustomMetadata` | `customMetadata/` | Custom Metadata Type Records |
 
----
+## Security & Access
+| XML Name (`<name>`) | Source Folder | Description |
+| :--- | :--- | :--- |
+| `PermissionSet` | `permissionsets/` | Permission Sets |
+| `PermissionSetGroup` | `permissionsetgroups/`| Permission Set Groups |
+| `Profile` | `profiles/` | Profiles (Avoid deploying full profiles; use Permission Sets) |
+| `CustomPermission` | `customPermissions/` | Custom Permissions for logic bypasses |
+| `SharingRules` | `sharingRules/` | Object Sharing Rules |
 
-## LWC and Aura
-
-| Type | Metadata API Name | Folder |
-|---|---|---|
-| Lightning Web Component | `LightningComponentBundle` | `force-app/main/default/lwc/<componentName>/` |
-| Aura Component | `AuraDefinitionBundle` | `force-app/main/default/aura/<componentName>/` |
-
-Each LWC folder contains: `.html`, `.js`, `.js-meta.xml`, optionally `.css` and `.svg`.
-
----
-
-## Objects and Fields
-
-| Type | Metadata API Name | File Extension | Folder |
-|---|---|---|---|
-| Custom Object | `CustomObject` | `.object-meta.xml` | `force-app/main/default/objects/<ObjectName__c>/` |
-| Custom Field | `CustomField` | `.field-meta.xml` | `force-app/main/default/objects/<ObjectName__c>/fields/` |
-| Record Type | `RecordType` | `.recordType-meta.xml` | `force-app/main/default/objects/<ObjectName__c>/recordTypes/` |
-| Validation Rule | `ValidationRule` | `.validationRule-meta.xml` | `force-app/main/default/objects/<ObjectName__c>/validationRules/` |
-
----
-
-## Permissions and Security
-
-| Type | Metadata API Name | File Extension | Folder |
-|---|---|---|---|
-| Permission Set | `PermissionSet` | `.permissionset-meta.xml` | `force-app/main/default/permissionsets/` |
-| Custom Permission | `CustomPermission` | `.customPermission-meta.xml` | `force-app/main/default/customPermissions/` |
-| Profile | `Profile` | `.profile-meta.xml` | `force-app/main/default/profiles/` |
-| Remote Site Setting | `RemoteSiteSetting` | `.remoteSite-meta.xml` | `force-app/main/default/remoteSiteSettings/` |
-| CSP Trusted Site | `CspTrustedSite` | `.cspTrustedSite-meta.xml` | `force-app/main/default/cspTrustedSites/` |
-
----
+## User Interface
+| XML Name (`<name>`) | Source Folder | Description |
+| :--- | :--- | :--- |
+| `Layout` | `layouts/` | Page Layouts |
+| `FlexiPage` | `flexipages/` | Lightning App Builder Pages |
+| `CustomTab` | `tabs/` | Custom Tabs |
+| `CustomApplication` | `applications/` | Lightning Apps |
 
 ## Integration
-
-| Type | Metadata API Name | File Extension | Folder |
-|---|---|---|---|
-| Named Credential | `NamedCredential` | `.namedCredential-meta.xml` | `force-app/main/default/namedCredentials/` |
-| External Credential | `ExternalCredential` | `.externalCredential-meta.xml` | `force-app/main/default/externalCredentials/` |
-
----
-
-## Flows and Automation
-
-| Type | Metadata API Name | File Extension | Folder |
-|---|---|---|---|
-| Flow | `Flow` | `.flow-meta.xml` | `force-app/main/default/flows/` |
-| Custom Metadata Type (definition) | `CustomObject` | `.object-meta.xml` | `force-app/main/default/objects/<TypeName__mdt>/` |
-| Custom Metadata Record | `CustomMetadata` | `.md-meta.xml` | `force-app/main/default/customMetadata/` |
-| Custom Setting (definition) | `CustomObject` | `.object-meta.xml` | `force-app/main/default/objects/<SettingName__c>/` |
-
----
-
-## UI
-
-| Type | Metadata API Name | File Extension | Folder |
-|---|---|---|---|
-| FlexiPage | `FlexiPage` | `.flexipage-meta.xml` | `force-app/main/default/flexipages/` |
-| Custom Tab | `CustomTab` | `.tab-meta.xml` | `force-app/main/default/tabs/` |
-| Custom Application | `CustomApplication` | `.app-meta.xml` | `force-app/main/default/applications/` |
-| Page Layout | `Layout` | `.layout-meta.xml` | `force-app/main/default/layouts/` |
-| Compact Layout | `CompactLayout` | `.compactLayout-meta.xml` | `force-app/main/default/objects/<ObjectName>/compactLayouts/` |
-| Static Resource | `StaticResource` | `.resource` + `.resource-meta.xml` | `force-app/main/default/staticresources/` |
-
----
-
-## package.xml Snippet: Common Types
-
-```xml
-<?xml version="1.0" encoding="UTF-8"?>
-<Package xmlns="http://soap.sforce.com/2006/04/metadata">
-    <types>
-        <members>*</members>
-        <name>ApexClass</name>
-    </types>
-    <types>
-        <members>*</members>
-        <name>ApexTrigger</name>
-    </types>
-    <types>
-        <members>*</members>
-        <name>CustomObject</name>
-    </types>
-    <types>
-        <members>*</members>
-        <name>LightningComponentBundle</name>
-    </types>
-    <types>
-        <members>*</members>
-        <name>Flow</name>
-    </types>
-    <types>
-        <members>*</members>
-        <name>PermissionSet</name>
-    </types>
-    <version>62.0</version>
-</Package>
-```
+| XML Name (`<name>`) | Source Folder | Description |
+| :--- | :--- | :--- |
+| `NamedCredential` | `namedCredentials/` | Named Credentials (Legacy) |
+| `ExternalCredential` | `externalCredentials/`| External Credentials (Modern Auth) |
+| `RemoteSiteSetting` | `remoteSiteSettings/` | Remote Site Settings |

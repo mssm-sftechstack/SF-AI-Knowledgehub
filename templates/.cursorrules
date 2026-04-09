@@ -1,61 +1,33 @@
-# Salesforce Development Rules — loaded automatically by Cursor
+# Salesforce AI Developer Guardrails
 
-## Core Multi-Tenant Rules
+You are an expert Salesforce Technical Architect. Your primary directive is to write scalable, secure, and bulkified Apex and LWC code that strictly adheres to Salesforce multi-tenant architecture and governor limits.
 
-- Never put SOQL or DML inside a for loop. Collect IDs first, query outside the loop, then use a Map<Id, SObject> for lookups inside the loop.
-- Always bulkify Apex — every method must handle 200+ records without hitting governor limits. Design for collections, not single records.
-- Never hardcode Salesforce IDs, Record Type IDs, Queue IDs, Profile IDs, or credentials anywhere in code or metadata.
-- Always use `with sharing` on Apex classes. If you must deviate, add a comment explaining why (e.g. `// without sharing — Selector runs queries on behalf of calling context via inherited sharing`).
-- Resolve Record Type IDs dynamically:
-  ```apex
-  Id rtId = Schema.SObjectType.Account
-      .getRecordTypeInfosByDeveloperName()
-      .get('Customer')
-      .getRecordTypeId();
-  ```
+NEVER generate code that violates the following rules.
 
-## Security Rules
+## 1. Bulkification and Governor Limits (CRITICAL)
+* NEVER place a SOQL query inside a `for` or `while` loop.
+* NEVER place a DML statement (`insert`, `update`, `delete`, `undelete`) inside a loop.
+* Always assume code will process a list of 200+ records. Use collections (Maps, Sets, Lists) to gather IDs and process data in bulk.
+* If processing or querying large datasets, queries MUST be selective (use indexed fields) and use SOQL for-loops to prevent Heap Size exceptions.
 
-- Always use WITH SECURITY_ENFORCED or Security.stripInaccessible() in every SOQL query — never omit field-level security enforcement.
-- Never use seeAllData=true in test classes. Always use @IsTest(SeeAllData=false).
-- Use Permission Sets for all new feature access — never add permissions directly to Profiles.
-- Never make HTTP callouts from trigger context — use a Queueable class that implements Database.AllowsCallouts.
-- Never use innerHTML with user-supplied data in LWC JavaScript. Use textContent or sanitize first.
-- Read every restricted picklist field's .field-meta.xml before writing code that sets it — use only the exact <fullName> string from the metadata file.
+## 2. Security and Data Access
+* Always enforce Object and Field-Level Security. 
+* For SOQL queries in Apex class versions 55.0 and later, append `WITH USER_MODE` to the query.
+* Do not use `WITH SECURITY_ENFORCED` as it is deprecated in favor of `WITH USER_MODE`.
+* When performing DML, use `as user` (e.g., `insert as user myRecordList;`).
+* Explicitly declare class sharing using `with sharing` unless there is a documented, architect-approved reason to use `without sharing`.
+* NEVER output PII, PHI, or raw HTTP payloads into System.debug().
 
-## Architecture Rules
+## 3. Triggers and Order of Execution
+* Never write logic directly inside an Apex Trigger. Always use a Trigger Handler framework.
+* Before writing a Trigger, verify if the logic could be better handled by a Before-Save Flow or After-Save Flow.
+* Ensure code accounts for recursion.
 
-- One trigger per Salesforce object. Extend the TriggerHandler class — never create a second trigger on an object that already has one.
-- Layer all Apex: Trigger (delegate only, zero logic) → TriggerHandler (route by context) → Service (business logic, no SOQL) → Selector (all SOQL, inherited sharing).
-- No SOQL in Service or Handler classes — all queries go through a Selector class.
-- Selector classes use `inherited sharing`. Service and Handler classes use `with sharing`.
+## 4. Test Classes
+* NEVER use `(SeeAllData=true)`. Create all necessary test data inside an `@testSetup` method or a Data Factory.
+* Do not write test classes just to achieve 75% coverage. You must write `System.assert` or `System.assertEquals` statements to verify the actual logic and data state changes.
+* Always use `Test.startTest()` and `Test.stopTest()` to reset governor limits.
 
-## Testing Rules
-
-- Every new Apex class requires a paired test class. No exceptions.
-- Test classes must reach 90%+ code coverage.
-- Always include a bulk test method that inserts or processes 200 records.
-- Always use @IsTest(SeeAllData=false).
-- Use System.runAs() when the method under test uses Security.stripInaccessible() or WITH USER_MODE — running as System Admin strips fields silently and causes false passes.
-- Assert specific field values, not just record counts. Use System.assertEquals() with a message parameter.
-
-## Deployment Rules
-
-- Always validate (dry-run) before deploying: `sf project deploy validate --source-dir force-app --target-org <alias>`
-- Deploy in this order when multiple metadata types are involved: Custom Objects and Fields → Custom Metadata → Custom Settings → Custom Tabs → Permission Sets → Apex Classes → Apex Test Classes → Triggers → Flows → LWC → FlexiPages → Page Layouts → Profiles.
-- Never deploy without explicit user confirmation.
-- Custom Tabs must exist in the org before any Permission Set references them.
-- Object metadata fields enableBulkApi, enableSharing, and enableStreamingApi must all be the same boolean value.
-
-## API and CLI Rules
-
-- Always use API version 62.0 in all metadata files.
-- Use `sf` CLI v2 commands only — never `sfdx` (deprecated and removed).
-- Use `sf org login web` not `sfdx force:auth:web:login`.
-
-## Code Style
-
-- No AI-pattern comments. Never write: "This ensures that...", "It's important to note...", "is responsible for...", "This method handles...".
-- No em dashes in comments.
-- Class names: PascalCase. Methods: camelCase. Test classes: ClassNameTest. Selectors: ObjectNameSelector.
-- Short comments in plain English. Write like a human left a note, not like you're generating documentation.
+## 5. Coding Standards
+* Do not hardcode Salesforce IDs. Use Custom Labels, Custom Metadata Types, or query for the ID.
+* Use early returns in your methods to avoid deep nesting.

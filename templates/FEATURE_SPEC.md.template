@@ -1,157 +1,24 @@
-# Feature Spec: [Feature Name]
+# Feature Specification for AI Generation
 
-<!-- This template drives design-first development. Fill it in before writing any code.
-     Share it with your AI tool using: "Read FEATURE_SPEC.md and then build this feature." -->
+**Developer Instructions:** Fill out this template BEFORE prompting the AI to generate code. Feed this completed document to the AI as its starting context.
 
----
+## 1. Feature Overview
+* **Business Goal:** [Briefly describe what we are trying to achieve]
+* **Target Users:** [Who will use this? e.g., Sales Reps, Community Users]
 
-## Problem and Purpose
+## 2. Data Model Impacts
+* **Triggering Object:** [e.g., Opportunity]
+* **Related Objects Queried:** [e.g., Account, QuoteLineItem]
+* **Objects to Update/Insert:** [e.g., Task, Quote]
 
-**What problem does this solve?**
-<!-- One or two sentences. What breaks or is missing today? -->
+## 3. Automation Strategy
+* **Can this be done with Flow?** [Yes/No. If yes, why are we using Apex?]
+* **Is Asynchronous Processing Required?** [Yes/No. Is volume expected to exceed 100 records or involve external callouts?]
 
-**Who benefits?**
-<!-- User role, team, or process that this feature serves -->
+## 4. Security Context
+* **Sharing Rules:** [Does this need to bypass sharing? Default to `with sharing`]
+* **CRUD/FLS Enforcement:** [Are we using `WITH USER_MODE` and `as user`?]
 
-**Success criteria:**
-<!-- How do you know this feature is working? List observable outcomes. -->
-
----
-
-## Files to Create
-
-<!-- List every new file with its exact path. Be specific so the AI doesn't guess. -->
-
-| File | Type | Purpose |
-|---|---|---|
-| `force-app/main/default/classes/FeatureNameService.cls` | Apex Service | Business logic |
-| `force-app/main/default/classes/FeatureNameServiceTest.cls` | Apex Test | Test coverage for service |
-| `force-app/main/default/triggers/ObjectNameTrigger.trigger` | Trigger | Entry point (if new object) |
-| `force-app/main/default/lwc/featureNameComponent/` | LWC | UI component (if applicable) |
-
----
-
-## Files to Modify
-
-| File | Change |
-|---|---|
-| `force-app/main/default/classes/ObjectNameTriggerHandler.cls` | Add new context method |
-| `manifest/package.xml` | Add new metadata types |
-
----
-
-## Method Signatures
-
-<!-- Define the API surface before writing any implementation. -->
-
-```apex
-// FeatureNameService.cls
-public with sharing class FeatureNameService {
-
-    /**
-     * Main entry point called from trigger handler.
-     * Designed for 200+ records.
-     */
-    public static void processRecords(List<ObjectName__c> records, Map<Id, ObjectName__c> oldMap) {}
-
-    /**
-     * Called from LWC via @AuraEnabled — returns data for the component.
-     */
-    @AuraEnabled(cacheable=true)
-    public static List<FeatureNameService.ResultWrapper> getDisplayData(Id recordId) {}
-
-    public class ResultWrapper {
-        @AuraEnabled public String fieldOne { get; set; }
-        @AuraEnabled public Decimal fieldTwo { get; set; }
-    }
-}
-```
-
----
-
-## Deployment Phases
-
-<!-- Break the feature into independently deployable phases.
-     Phase 1 must be safe to deploy even if Phase 2 never ships. -->
-
-### Phase 1 — Data Model
-- [ ] Custom object: `ObjectName__c`
-- [ ] Custom fields: list them here
-- [ ] Permission Set: `FeatureName_Access`
-
-**Deploy independently? Yes**
-
-### Phase 2 — Business Logic
-- [ ] Apex service class and test class
-- [ ] Trigger and handler extension
-
-**Deploy independently? Yes (requires Phase 1)**
-
-### Phase 3 — UI
-- [ ] LWC component
-- [ ] FlexiPage or Page Layout update
-
-**Deploy independently? Yes (requires Phase 2)**
-
----
-
-## Manual Pre-Deploy Steps
-
-<!-- Steps that can't be scripted. Do these in Setup before deploying. -->
-
-- [ ] Example: Create Platform Cache Partition "MyPartition" in Setup > Platform Cache
-- [ ] Example: Enable the "Enable Enhanced Email" setting in Setup > Email
-- [ ] Example: Obtain the external API endpoint URL and add it as Remote Site Setting
-
----
-
-## Architecture Diagram
-
-```mermaid
-flowchart TD
-    A[User Action] --> B[LWC Component]
-    B --> C[FeatureNameService.getDisplayData]
-    C --> D[FeatureNameSelector SOQL]
-    D --> E[ObjectName__c records]
-
-    F[Record Save] --> G[ObjectNameTrigger]
-    G --> H[ObjectNameTriggerHandler]
-    H --> I[FeatureNameService.processRecords]
-    I --> J[FeatureNameSelector SOQL]
-    I --> K[DML via Unit of Work]
-```
-
----
-
-## Known Risks and Dependencies
-
-| Risk | Likelihood | Mitigation |
-|---|---|---|
-| Example: Existing trigger on Account may conflict | Medium | Extend AccountTriggerHandler, don't add a new trigger |
-| Example: Field-level security strips custom field for some profiles | High | Use System.runAs() in tests, add fieldPermissions in Permission Set |
-| Example: External API rate limit | Low | Add retry logic in Queueable, log failures to custom object |
-
-**Dependencies on other features or deployments:**
-<!-- List anything that must exist in the org before this feature deploys. -->
-
----
-
-## Test Strategy
-
-| Test Class | Methods to Cover | Key Assertions |
-|---|---|---|
-| `FeatureNameServiceTest` | `processRecords` — positive, negative, bulk | Field values updated correctly, no exceptions thrown |
-| `FeatureNameServiceTest` | `getDisplayData` — valid ID, null ID | Returns correct wrapper data, throws AuraHandledException on null |
-
-**Bulk test:** Insert 200 `ObjectName__c` records and call `processRecords`. Assert all 200 are updated correctly.
-
-**runAs requirement:** Yes — tests call `Security.stripInaccessible()`. Use a Standard User with the `FeatureName_Access` Permission Set.
-
----
-
-## Open Questions
-
-<!-- Questions that must be answered before coding starts. -->
-
-- [ ] Question 1: What happens when Field X is blank — skip the record or throw an error?
-- [ ] Question 2: Should the LWC component be visible to all users with object access, or only those with the FeatureName_Access Permission Set?
+## 5. Testing Requirements
+* **Negative Test Scenarios:** [What should happen when inputs are null or invalid?]
+* **Bulk Volume Expected:** [Minimum 200 records]
