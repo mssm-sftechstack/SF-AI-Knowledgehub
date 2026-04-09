@@ -1,6 +1,8 @@
 # Enterprise Automation & Flow Constraints
 
-**CRITICAL DIRECTIVE FOR AI:** You are operating in a Salesforce environment where declarative automation (Flows) and programmatic automation (Apex) share the same execution context and governor limits. You must never write Apex that duplicates, conflicts with, or unnecessarily bypasses Flow capabilities.
+**CRITICAL DIRECTIVE FOR AI:** You are operating in a Salesforce environment where declarative automation (Flows) and programmatic automation (Apex) share the same execution context and governor limits. You must never write Apex that duplicates, conflicts with, or unnecessarily bypasses Flow capabilities. 
+
+Always evaluate your logic against the [Order of Execution Pipeline](./ORDER_OF_EXECUTION.md).
 
 ## 1. The Automation Decision Matrix
 Before generating any Apex Trigger or asynchronous Apex, you must evaluate if the requirement falls into the Flow domain.
@@ -27,7 +29,7 @@ graph TD
     style A fill:#e1f5fe,stroke:#03a9f4,stroke-width:2px
 ```
 
-## 3. Invokable Methods (The Apex/Flow Bridge)
+## 3. Invocable Methods (The Apex/Flow Bridge)
 When writing logic that will be called by a Flow, you must strictly adhere to the `@InvocableMethod` constraints:
 * You must bulkify the input. The method signature MUST accept a `List<T>`. 
 * NEVER assume the list size is 1. Flows process bulk operations in chunks.

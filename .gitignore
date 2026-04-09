@@ -1,38 +1,36 @@
-# Salesforce DX
-.sfdx/
+# Salesforce CLI (Modern and Legacy)
 .sf/
-*.log
+.sfdx/
 
-# Node
-node_modules/
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
+# Local IDE & Editor Settings
+.vscode/
+.idea/
+*.suo
+*.user
 
-# VS Code
-.vscode/settings.json
-.vscode/launch.json
+# AI Coding Assistant Local Workspaces (DO NOT ignore the rules files, just the local state)
+.cursor/
+.windsurf/
 
-# OS
+# Operating System Files
 .DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
 Thumbs.db
-desktop.ini
 
-# Credentials / secrets — never commit these
-*.key
-*.pem
-*.p12
-server.key
-jwt.key
-.env
-.env.*
+# Node Modules & Dependencies (If you add linting later)
+node_modules/
+npm-debug.log
+yarn-error.log
 
-# Build artifacts
-dist/
-build/
+# Build & Log Files
+*.log
 *.zip
+*.tar.gz
 
-# Claude Code local session files
-.claude/sessions/
-.claude/cache/
-.claude/telemetry/
+# Environment Variables
+.env
+.env.local
